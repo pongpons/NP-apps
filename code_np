@@ -1,0 +1,533 @@
+import React, { useState, useEffect, useMemo, createContext, useContext } from 'react';
+import { Home, BarChart2, LogOut, Users, Search, MapPin, User as UserIcon, Phone, ArrowLeft, Edit } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval } from 'date-fns';
+import { th } from 'date-fns/locale';
+
+// --- SUPABASE CLIENT SETUP ---
+// FIX: The compilation environment cannot resolve node modules or import.meta.
+// We now assume the Supabase library is loaded via a CDN script tag in your index.html.
+//
+// ACTION REQUIRED (1/2): Add this line to your main HTML file (e.g., index.html):
+// <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+//
+// ACTION REQUIRED (2/2): You MUST replace the placeholder strings below with your actual Supabase URL and Anon Key.
+const supabaseUrl = 'https://borfxmrensuzmxayncvf.supabase.co'; // <-- REPLACE THIS
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvcmZ4bXJlbnN1em14YXluY3ZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY2MDA5MzEsImV4cCI6MjA2MjE3NjkzMX0.ny7tEHckNEN5ncLKYS7h5rTL8jasHvUz9KpePnuIi7Q'; // <-- REPLACE THIS
+
+// Check if Supabase is loaded from the CDN and get createClient from the global scope
+const { createClient } = window.supabase || {};
+
+// Create a placeholder client if the library isn't loaded to prevent crashes.
+// This allows the app to render an error message instead of breaking.
+export const supabase = createClient ? createClient(supabaseUrl, supabaseAnonKey) : {
+    auth: { 
+        getSession: async () => ({ data: { session: null } }), 
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        signInWithPassword: async () => ({ error: { message: 'Supabase client not loaded.' } })
+    },
+    from: () => ({ 
+        select: () => ({ 
+            eq: () => ({ 
+                single: async () => ({ data: null, error: { message: 'Supabase client not loaded.' } }),
+                order: async () => ({ data: [], error: { message: 'Supabase client not loaded.' } })
+            }),
+            gte: () => ({ lte: () => ({ data: [], error: { message: 'Supabase client not loaded.' } }) })
+        }) 
+    })
+};
+
+// --- HELPER COMPONENT TO CHECK SETUP ---
+function SetupChecker({ children }) {
+    if (!createClient) {
+        return (
+            <div style={{ padding: '20px', margin: '20px', backgroundColor: '#ffdddd', border: '1px solid #ff0000', borderRadius: '8px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+                <h2 style={{color: '#d00'}}>ข้อผิดพลาด: ไม่พบไลบรารี Supabase</h2>
+                <p style={{color: '#333'}}>กรุณาเพิ่มโค้ดบรรทัดนี้ในไฟล์ HTML หลักของคุณ (เช่น index.html):</p>
+                <code style={{ display: 'block', padding: '10px', backgroundColor: '#f0f0f0', marginTop: '10px', borderRadius: '4px', color: '#333' }}>
+                    &lt;script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"&gt;&lt;/script&gt;
+                </code>
+            </div>
+        );
+    }
+    if (supabaseUrl.startsWith('YOUR_')) {
+         return (
+            <div style={{ padding: '20px', margin: '20px', backgroundColor: '#fffadd', border: '1px solid #f0e68c', borderRadius: '8px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+                <h2 style={{color: '#333'}}>ต้องการการตั้งค่าเพิ่มเติม</h2>
+                <p style={{color: '#333'}}>กรุณาแทนที่ 'YOUR_SUPABASE_URL' และ 'YOUR_SUPABASE_ANON_KEY' ในโค้ดด้วยข้อมูลจริงจากโปรเจกต์ Supabase ของคุณ</p>
+            </div>
+        );
+    }
+    return children;
+}
+
+
+// --- AUTHENTICATION CONTEXT ---
+const AuthContext = createContext();
+
+export function AuthProvider({ children }) {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      if (session) {
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        setProfile(userProfile);
+      }
+      setLoading(false);
+    };
+
+    getSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setSession(session);
+        if (session) {
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          setProfile(userProfile);
+        } else {
+          setProfile(null);
+        }
+      }
+    );
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const value = {
+    session,
+    profile,
+    loading,
+    signOut: () => supabase.auth.signOut(),
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
+
+// --- NAVIGATION CONTEXT ---
+const RouteContext = createContext();
+
+function RouteProvider({ children }) {
+    const [route, setRoute] = useState({ path: '/', params: {} });
+
+    const navigate = (path, params = {}) => {
+        setRoute({ path, params });
+    };
+
+    return (
+        <RouteContext.Provider value={{ route, navigate }}>
+            {children}
+        </RouteContext.Provider>
+    );
+}
+
+function useNavigation() {
+    return useContext(RouteContext);
+}
+
+
+// --- UI COMPONENTS ---
+
+function Layout({ children, title }) {
+  const { signOut, profile } = useAuth();
+  const { navigate } = useNavigation();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/'); // Will be redirected to login by AppRouter
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      <header className="bg-white dark:bg-gray-800 shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
+        <h1 className="text-xl font-bold text-blue-600 dark:text-blue-400">{title}</h1>
+        <div className="flex items-center space-x-4">
+            <span className="text-sm font-medium hidden sm:block">{profile?.full_name} ({profile?.role})</span>
+            <button onClick={handleSignOut} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                <LogOut size={20} />
+            </button>
+        </div>
+      </header>
+      
+      <main className="p-4 pb-20">
+        {children}
+      </main>
+
+      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex justify-around p-2">
+        <button onClick={() => navigate('/')} className="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+          <Home size={24} />
+          <span className="text-xs mt-1">หน้าหลัก</span>
+        </button>
+        {profile?.role === 'sales' && (
+          <button onClick={() => navigate('/reports')} className="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+            <BarChart2 size={24} />
+            <span className="text-xs mt-1">รายงาน</span>
+          </button>
+        )}
+        {profile?.role === 'admin' && (
+           <button onClick={() => navigate('/')} className="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+            <Users size={24} />
+            <span className="text-xs mt-1">จัดการ</span>
+          </button>
+        )}
+      </nav>
+    </div>
+  );
+};
+
+
+// --- PAGE COMPONENTS ---
+
+function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // AuthProvider will handle session update and AppRouter will redirect
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md dark:bg-gray-800">
+        <h1 className="text-2xl font-bold text-center">Sales Tracker Login</h1>
+        <form onSubmit={handleLogin} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 mt-1 text-gray-800 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-2 mt-1 text-gray-800 bg-gray-200 dark:bg-gray-700 dark:text-gray-200 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full py-2 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300">
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DashboardPage() {
+  const { profile } = useAuth();
+  const { navigate } = useNavigation();
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterDistrict, setFilterDistrict] = useState('');
+
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      if (!profile) return;
+      setLoading(true);
+      const { data, error } = await supabase.from('customers').select('*').eq('sales_owner_id', profile.id);
+      if (error) console.error('Error fetching customers:', error);
+      else setCustomers(data);
+      setLoading(false);
+    };
+    fetchCustomers();
+  }, [profile]);
+
+  const districts = useMemo(() => [...new Set(customers.map(c => c.district).filter(Boolean))], [customers]);
+
+  const filteredCustomers = useMemo(() => customers.filter(customer => 
+    (customer.name.toLowerCase().includes(searchTerm.toLowerCase()) || (customer.address && customer.address.toLowerCase().includes(searchTerm.toLowerCase()))) &&
+    (filterDistrict ? customer.district === filterDistrict : true)
+  ), [customers, searchTerm, filterDistrict]);
+
+  if (loading) return <Layout title="ลูกค้าของฉัน"><div className="text-center">กำลังโหลดข้อมูลลูกค้า...</div></Layout>;
+
+  return (
+    <Layout title="ลูกค้าของฉัน">
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <input type="text" placeholder="ค้นหาชื่อลูกค้า, ที่อยู่..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
+        </div>
+        <select value={filterDistrict} onChange={(e) => setFilterDistrict(e.target.value)} className="w-full mt-2 p-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+          <option value="">ทุกอำเภอ</option>
+          {districts.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>
+      <div className="space-y-3">
+        {filteredCustomers.map(customer => (
+          <div key={customer.id} onClick={() => navigate('/customer', { id: customer.id })} className="block bg-white dark:bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-full"><UserIcon className="text-blue-600 dark:text-blue-400" size={20}/></div>
+                <div>
+                  <h3 className="font-semibold">{customer.name}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{customer.district}, {customer.sub_district}</p>
+                </div>
+              </div>
+              <MapPin className="text-gray-400" size={20}/>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Layout>
+  );
+}
+
+function CustomerDetailPage() {
+    const { route, navigate } = useNavigation();
+    const { id } = route.params;
+    const [customer, setCustomer] = useState(null);
+    const [salesHistory, setSalesHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!id) return;
+        const fetchCustomerData = async () => {
+            setLoading(true);
+            const { data: cData, error: cError } = await supabase.from('customers').select('*').eq('id', id).single();
+            if (cError) { console.error(cError); navigate('/'); return; }
+            setCustomer(cData);
+            const { data: sData, error: sError } = await supabase.from('sales_records').select('*').eq('customer_id', id).order('created_at', { ascending: false });
+            if (sError) console.error(sError);
+            else setSalesHistory(sData);
+            setLoading(false);
+        };
+        fetchCustomerData();
+    }, [id, navigate]);
+
+    const handleNavigateMap = () => {
+        if (customer?.latitude && customer?.longitude) {
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${customer.latitude},${customer.longitude}`, '_blank');
+        }
+    };
+
+    if (loading) return <Layout title="รายละเอียดลูกค้า"><div className="text-center">กำลังโหลด...</div></Layout>;
+    if (!customer) return <Layout title="ไม่พบข้อมูล"><p>ไม่พบข้อมูลลูกค้า</p></Layout>
+
+    return (
+        <Layout title="รายละเอียดลูกค้า">
+            <button onClick={() => navigate('/')} className="flex items-center space-x-2 text-blue-600 dark:text-blue-400 mb-4"><ArrowLeft size={20} /><span>กลับ</span></button>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+                {customer.photo_url && <img src={customer.photo_url} onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/600x400/e2e8f0/e2e8f0?text=Image' }} alt={customer.name} className="w-full h-48 object-cover rounded-lg mb-4" />}
+                <div className="flex justify-between items-start">
+                    <h2 className="text-2xl font-bold mb-2">{customer.name}</h2>
+                    <button className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Edit size={18}/></button>
+                </div>
+                <div className="space-y-3 text-gray-600 dark:text-gray-300">
+                    <p className="flex items-center"><Phone size={16} className="mr-3" /> {customer.phone || 'N/A'}</p>
+                    <p className="flex items-start"><MapPin size={16} className="mr-3 mt-1" /> {customer.address}, {customer.sub_district}, {customer.district}</p>
+                </div>
+                <button onClick={handleNavigateMap} className="w-full mt-4 py-3 bg-green-500 text-white font-bold rounded-lg flex items-center justify-center space-x-2 hover:bg-green-600"><MapPin size={20} /><span>นำทางด้วย Google Maps</span></button>
+            </div>
+            <div className="mt-6">
+                <h3 className="text-xl font-semibold mb-3">ประวัติการขาย</h3>
+                <div className="space-y-3">
+                    {salesHistory.length > 0 ? salesHistory.map(sale => (
+                        <div key={sale.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow flex justify-between items-center">
+                            <div>
+                                <p className="font-semibold">{new Date(sale.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric'})}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{sale.notes}</p>
+                            </div>
+                            <p className="font-bold text-lg text-green-600">{new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(sale.amount)}</p>
+                        </div>
+                    )) : (<p className="text-center text-gray-500 bg-white dark:bg-gray-800 p-4 rounded-lg">ยังไม่มีประวัติการขาย</p>)}
+                </div>
+            </div>
+        </Layout>
+    );
+}
+
+function SalesReportPage() {
+    const { profile } = useAuth();
+    const [sales, setSales] = useState([]);
+    const [period, setPeriod] = useState('month');
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!profile) return;
+        const fetchSales = async () => {
+            setLoading(true);
+            const now = new Date();
+            let startDate, endDate;
+            if (period === 'month') { [startDate, endDate] = [startOfMonth(now), endOfMonth(now)]; }
+            else if (period === 'year') { [startDate, endDate] = [startOfYear(now), endOfYear(now)]; }
+            const { data, error } = await supabase.from('sales_records').select('amount, created_at').eq('sales_person_id', profile.id).gte('created_at', startDate.toISOString()).lte('created_at', endDate.toISOString());
+            if (error) console.error(error);
+            else setSales(data);
+            setLoading(false);
+        };
+        fetchSales();
+    }, [profile, period]);
+
+    const chartData = useMemo(() => {
+        if (period === 'month') {
+            const monthlyData = eachDayOfInterval({ start: startOfMonth(new Date()), end: endOfMonth(new Date()) }).map(day => ({ name: format(day, 'd MMM', { locale: th }), ยอดขาย: 0 }));
+            sales.forEach(sale => {
+                const dayIndex = new Date(sale.created_at).getDate() - 1;
+                if(monthlyData[dayIndex]) monthlyData[dayIndex].ยอดขาย += sale.amount;
+            });
+            return monthlyData;
+        }
+        if (period === 'year') {
+            const yearlyData = Array.from({length: 12}, (_, i) => ({ name: format(new Date(2000, i, 1), 'MMM', { locale: th }), ยอดขาย: 0 }));
+            sales.forEach(sale => {
+                const monthIndex = new Date(sale.created_at).getMonth();
+                yearlyData[monthIndex].ยอดขาย += sale.amount;
+            });
+            return yearlyData;
+        }
+        return [];
+    }, [sales, period]);
+
+    const totalSales = useMemo(() => sales.reduce((acc, sale) => acc + sale.amount, 0), [sales]);
+
+    return (
+        <Layout title="รายงานยอดขาย">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <div className="flex justify-center space-x-2 mb-4">
+                    <button onClick={() => setPeriod('month')} className={`px-4 py-2 rounded-lg ${period === 'month' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>เดือนนี้</button>
+                    <button onClick={() => setPeriod('year')} className={`px-4 py-2 rounded-lg ${period === 'year' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>ปีนี้</button>
+                </div>
+                <div className="text-center">
+                    <p className="text-gray-500">ยอดขายรวม ({period === 'month' ? 'เดือนนี้' : 'ปีนี้'})</p>
+                    <p className="text-3xl font-bold text-green-600">{new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(totalSales)}</p>
+                </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow" style={{height: '300px'}}>
+                {loading ? <p>กำลังโหลดกราฟ...</p> : (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" fontSize={12} />
+                            <YAxis width={80} tickFormatter={(value) => new Intl.NumberFormat('th-TH', {notation: "compact"}).format(value)} />
+                            <Tooltip formatter={(value) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(value)} />
+                            <Legend />
+                            <Bar dataKey="ยอดขาย" fill="#8884d8" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                )}
+            </div>
+        </Layout>
+    );
+}
+
+function AdminDashboard() {
+    const [stats, setStats] = useState({ salesPeople: 0, customers: 0, totalSales: 0 });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchAdminData = async () => {
+            setLoading(true);
+            const { count: salesPeopleCount } = await supabase.from('profiles').select('*', { count: 'exact' }).eq('role', 'sales');
+            const { count: customersCount } = await supabase.from('customers').select('*', { count: 'exact' });
+            const { data: salesData, error } = await supabase.from('sales_records').select('amount');
+            const totalSales = error ? 0 : salesData.reduce((sum, record) => sum + record.amount, 0);
+            setStats({ salesPeople: salesPeopleCount || 0, customers: customersCount || 0, totalSales });
+            setLoading(false);
+        };
+        fetchAdminData();
+    }, []);
+
+    return (
+        <Layout title="Admin Dashboard">
+            {loading ? <p>Loading admin data...</p> :
+            <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                        <h3 className="text-lg font-medium text-gray-500">พนักงานขาย</h3>
+                        <p className="text-3xl font-bold">{stats.salesPeople}</p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                        <h3 className="text-lg font-medium text-gray-500">ลูกค้าทั้งหมด</h3>
+                        <p className="text-3xl font-bold">{stats.customers}</p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                        <h3 className="text-lg font-medium text-gray-500">ยอดขายรวม</h3>
+                        <p className="text-3xl font-bold text-green-600">{new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(stats.totalSales)}</p>
+                    </div>
+                </div>
+                <div className="mt-8 bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                    <h3 className="text-xl font-semibold mb-4">การจัดการ</h3>
+                    <p className="text-gray-600 dark:text-gray-400">ส่วนนี้คือพื้นที่สำหรับ Admin ในการจัดการข้อมูลต่างๆ</p>
+                </div>
+            </>
+            }
+        </Layout>
+    );
+}
+
+
+// --- MAIN APP ROUTER ---
+function AppRouter() {
+    const { session, loading, profile } = useAuth();
+    const { route, navigate } = useNavigation();
+
+    useEffect(() => {
+        if (!loading && !session) {
+            navigate('/');
+        }
+    }, [session, loading, navigate]);
+
+    if (loading) {
+        return <div className="flex items-center justify-center h-screen">Loading App...</div>;
+    }
+
+    if (!session) {
+        return <LoginPage />;
+    }
+
+    switch (route.path) {
+        case '/customer':
+            return <CustomerDetailPage />;
+        case '/reports':
+            return <SalesReportPage />;
+        case '/':
+        default:
+            return profile?.role === 'admin' ? <AdminDashboard /> : <DashboardPage />;
+    }
+}
+
+// --- FINAL APP WRAPPER ---
+export default function App() {
+    return (
+        <SetupChecker>
+            <AuthProvider>
+                <RouteProvider>
+                    <AppRouter />
+                </RouteProvider>
+            </AuthProvider>
+        </SetupChecker>
+    );
+}
