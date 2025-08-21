@@ -1,0 +1,2179 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Namtip Water PWA</title>
+
+    <!-- PWA Manifest & Theme -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f172a"> <!-- slate-900 for dark theme -->
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Leaflet JS & CSS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- THEME & DESIGN SYSTEM (IGNITE THEME) --- */
+        :root { /* Dark Theme (Default) */
+            --color-background: #0f172a; /* slate-900 */
+            --color-card: #1e293b; /* slate-800 */
+            --color-card-alt: #131c2d; /* A slightly darker, more distinct shade */
+            --color-header: #1e293b; /* slate-800 */
+            --color-text-primary: #f1f5f9; /* slate-100 */
+            --color-text-secondary: #94a3b8; /* slate-400 */
+            --color-text-tertiary: #64748b; /* slate-500 */
+            --color-border: #334155; /* slate-700 */
+            --color-accent: #facc15; /* amber-400 */
+            --color-input-bg: #334155; /* slate-700 */
+            --color-input-border: #475569; /* slate-600 */
+            --color-icon-hover-bg: #334155; /* slate-700 */
+        }
+
+        body.light-theme { /* Light Theme */
+            --color-background: #f1f5f9; /* slate-100 */
+            --color-card: #ffffff;
+            --color-card-alt: #f8fafc; /* slate-50 */
+            --color-header: #ffffff;
+            --color-text-primary: #1e293b; /* slate-800 */
+            --color-text-secondary: #64748b; /* slate-500 */
+            --color-text-tertiary: #94a3b8; /* slate-400 */
+            --color-border: #e2e8f0; /* slate-200 */
+            --color-accent: #f59e0b; /* amber-500 */
+            --color-input-bg: #ffffff;
+            --color-input-border: #cbd5e1; /* slate-300 */
+            --color-icon-hover-bg: #e2e8f0; /* slate-200 */
+        }
+
+        /* --- Base Styles & Fonts --- */
+        body {
+            font-family: 'Noto Sans Thai', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: var(--color-background);
+            color: var(--color-text-primary);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* --- Page Transition System --- */
+        .page { display: none; position: absolute; width: 100%; height: 100%; top: 0; left: 0; animation-duration: 0.3s; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+        .page.active { display: flex; flex-direction: column; z-index: 1; }
+        .page.exiting { z-index: 0; }
+        @keyframes slideInFromRight { from { transform: translateX(100%); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOutToLeft { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0.5; } }
+        @keyframes slideInFromLeft { from { transform: translateX(-100%); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOutToRight { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0.5; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .page.slide-in-right { animation-name: slideInFromRight; }
+        .page.slide-out-left { animation-name: slideOutToLeft; }
+        .page.slide-in-left { animation-name: slideInFromLeft; }
+        .page.slide-out-right { animation-name: slideOutToRight; }
+        .page.fade-in { animation-name: fadeIn; animation-duration: 0.4s; }
+        .page.fade-out { animation-name: fadeOut; animation-duration: 0.4s; }
+
+        /* --- Main Content Layout --- */
+        .app-body { flex-grow: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        #main-content .app-body { padding-bottom: 80px; }
+        #salesperson-profile-page .app-body { padding-bottom: 24px; }
+
+        /* --- UI Component Styles --- */
+        .main-view { display: none; }
+        .main-view.active { display: block; }
+        #map, #overview-map { height: 100%; width: 100%; border-radius: 0.75rem; z-index: 0; }
+        #mini-map { height: 150px; width: 100%; border-radius: 0.75rem; display: none; }
+        input, textarea, select {
+            background-color: var(--color-input-bg);
+            color: var(--color-text-primary);
+            border-color: var(--color-input-border);
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px var(--color-accent);
+            border-color: var(--color-accent);
+        }
+        #bottom-nav button.active { color: var(--color-accent); }
+        summary::-webkit-details-marker { display: none; }
+        summary::after { content: '\f078'; font-family: 'Font Awesome 6 Free'; font-weight: 900; float: right; transition: transform 0.2s; }
+        details[open] summary::after { transform: rotate(180deg); }
+        .leaflet-popup-content-wrapper { border-radius: 0.5rem; padding: 0; background-color: var(--color-card); color: var(--color-text-primary); }
+        .leaflet-popup-content { margin: 0 !important; }
+        .sort-btn.active { background-color: #475569; color: var(--color-accent); border-color: #64748b; }
+        body.light-theme .sort-btn.active { background-color: #dbeafe; color: #2563eb; border-color: #93c5fd; }
+
+        /* --- Custom Toast Notification --- */
+        #toast {
+            position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%);
+            padding: 12px 24px; border-radius: 9999px; color: #0f172a; font-weight: 600;
+            z-index: 100; transition: all 0.5s ease-in-out; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        #toast.show { bottom: 90px; }
+        #toast.success { background-color: #34d399; } /* emerald-400 */
+        #toast.error { background-color: #f87171; } /* red-400 */
+        #toast.info { background-color: #60a5fa; } /* blue-400 */
+        
+        /* --- PWA Install Banner --- */
+        #install-banner {
+            transform: translateY(150%);
+            transition: transform 0.4s ease-in-out;
+        }
+        #install-banner.show {
+            transform: translateY(0);
+        }
+
+    </style>
+</head>
+<body class="bg-slate-900">
+
+    <div id="app-container" class="max-w-lg mx-auto bg-[var(--color-background)] min-h-screen shadow-2xl shadow-black/30 relative overflow-hidden">
+
+        <!-- Loading Spinner -->
+        <div id="loading-spinner" class="fixed inset-0 bg-[var(--color-background)] bg-opacity-75 flex items-center justify-center z-50 hidden">
+            <div class="relative h-24 w-24">
+                <div class="absolute top-0 left-0 h-full w-full rounded-full border-4 border-t-[var(--color-accent)] border-r-slate-600 animate-spin"></div>
+            </div>
+        </div>
+        
+        <!-- Toast Notification -->
+        <div id="toast"></div>
+
+        <!-- Home Page (Salesperson Selection) -->
+        <div id="home-page" class="page active fade-in flex-col bg-[var(--color-background)]">
+            <div class="flex-shrink-0 pt-6 pb-4 px-6 flex items-center justify-between">
+                 <div class="flex items-center gap-3">
+                    <i class="fas fa-tint text-2xl text-[var(--color-accent)]"></i>
+                    <h1 class="text-xl font-bold text-[var(--color-text-primary)] tracking-wide">Namtip Water</h1>
+                </div>
+                <button id="theme-toggle-btn" class="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-card)] text-[var(--color-text-secondary)] border border-[var(--color-border)] shadow-md">
+                    <i class="fas fa-sun"></i>
+                </button>
+            </div>
+            <div class="flex-grow overflow-y-auto px-6 pb-8">
+                <div id="salesperson-selection" class="space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- Main Content Page (Customers, Summary, Map) -->
+        <div id="main-content" class="page">
+            <header class="bg-[var(--color-header)]/80 backdrop-blur-sm p-4 flex justify-between items-center sticky top-0 z-10 border-b border-[var(--color-border)]">
+                <button id="back-to-home-btn" class="text-xl h-9 w-9 flex items-center justify-center rounded-full hover:bg-[var(--color-icon-hover-bg)] active:bg-slate-600 transition-colors text-[var(--color-text-secondary)]"><i class="fas fa-chevron-left"></i></button>
+                <h1 id="header-title" class="text-xl font-semibold text-[var(--color-text-primary)]">ลูกค้า</h1>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <div id="salesperson-info" class="text-sm text-right text-[var(--color-text-primary)]"></div>
+                    <button id="install-app-btn" class="hidden bg-slate-100 text-slate-800 px-3 py-1.5 rounded-full text-sm font-semibold hover:bg-slate-200 transition shadow"><i class="fas fa-download mr-2"></i>ติดตั้ง</button>
+                </div>
+            </header>
+
+            <div class="app-body p-4 bg-[var(--color-background)]">
+                <div id="customer-list-page" class="main-view active">
+                    <div class="bg-[var(--color-card)] p-3 rounded-xl shadow-lg border border-[var(--color-border)] mb-4">
+                        <div class="flex gap-2">
+                            <div class="relative flex-grow"><input type="text" id="search-input" class="w-full pl-10 pr-4 py-2 rounded-lg transition border" placeholder="ค้นหาลูกค้า..."><i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"></i></div>
+                            <div class="flex-shrink-0 flex gap-2">
+                                <button id="sort-date-btn" class="sort-btn p-2 border rounded-lg bg-[var(--color-input-bg)] hover:bg-slate-600 transition active"><i class="fas fa-sort-amount-up"></i></button>
+                                <button id="sort-dist-btn" class="sort-btn p-2 border rounded-lg bg-[var(--color-input-bg)] hover:bg-slate-600 transition"><i class="fas fa-location-arrow"></i></button>
+                            </div>
+                        </div>
+                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label for="sub-district-filter" class="text-sm font-medium text-[var(--color-text-secondary)]">กรองตามตำบล:</label>
+                                <select id="sub-district-filter" class="mt-1 w-full rounded-lg p-2 transition border"></select>
+                            </div>
+                            <div>
+                                <label for="village-filter" class="text-sm font-medium text-[var(--color-text-secondary)]">กรองตามหมู่บ้าน:</label>
+                                <select id="village-filter" class="mt-1 w-full rounded-lg p-2 transition border"></select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="customer-list" class="space-y-3"></div>
+                    <button id="add-customer-btn" class="fixed bottom-24 right-6 bg-[var(--color-accent)] text-slate-900 w-16 h-16 rounded-2xl shadow-lg shadow-amber-400/20 flex items-center justify-center text-3xl hover:opacity-90 transition-transform hover:scale-105 active:scale-100 z-20"><i class="fas fa-plus"></i></button>
+                </div>
+                <div id="sales-summary-page" class="main-view">
+                    <div id="sales-summary-content" class="space-y-4"></div>
+                     <div class="mt-6 bg-[var(--color-card)] p-4 rounded-xl shadow-lg border border-[var(--color-border)]">
+                        <h3 class="text-lg font-semibold text-[var(--color-text-primary)] mb-2">ดูยอดขายตามช่วงเวลา</h3>
+                        <div class="flex gap-2 items-center">
+                            <input type="date" id="start-date-input" class="w-full p-2 rounded-lg border">
+                            <span class="text-[var(--color-text-secondary)]">ถึง</span>
+                            <input type="date" id="end-date-input" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <button id="view-range-btn" class="mt-2 w-full bg-amber-500 text-slate-900 py-2 rounded-lg font-semibold hover:bg-amber-400 transition">แสดงข้อมูล</button>
+                        <div id="custom-range-summary" class="mt-4"></div>
+                    </div>
+                </div>
+                <div id="overview-map-page" class="main-view" style="height: calc(100vh - 150px);">
+                    <div id="overview-map"></div>
+                </div>
+            </div>
+
+            <footer id="bottom-nav" class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-[var(--color-card)]/80 backdrop-blur-sm border-t border-[var(--color-border)] flex justify-around p-2 z-20">
+                <button data-view="customer-list-page" class="nav-btn flex flex-col items-center text-[var(--color-text-secondary)] p-2 rounded-lg w-24 transition-colors hover:bg-[var(--color-input-bg)]">
+                    <i class="fas fa-users text-xl"></i><span class="text-xs mt-1">ลูกค้า</span>
+                </button>
+                <button data-view="sales-summary-page" class="nav-btn flex flex-col items-center text-[var(--color-text-secondary)] p-2 rounded-lg w-24 transition-colors hover:bg-[var(--color-input-bg)]">
+                    <i class="fas fa-chart-pie text-xl"></i><span class="text-xs mt-1">สรุปยอด</span>
+                </button>
+                <button data-view="overview-map-page" class="nav-btn flex flex-col items-center text-[var(--color-text-secondary)] p-2 rounded-lg w-24 transition-colors hover:bg-[var(--color-input-bg)]">
+                    <i class="fas fa-map-marked-alt text-xl"></i><span class="text-xs mt-1">แผนที่</span>
+                </button>
+            </footer>
+        </div>
+
+        <!-- Salesperson Profile Page -->
+        <div id="salesperson-profile-page" class="page">
+            <header class="bg-[var(--color-header)]/80 backdrop-blur-sm text-white p-4 flex justify-between items-center sticky top-0 z-10 border-b border-[var(--color-border)]">
+                <button id="back-to-home-from-profile-btn" class="text-xl h-9 w-9 flex items-center justify-center rounded-full hover:bg-[var(--color-icon-hover-bg)] transition-colors text-[var(--color-text-secondary)]"><i class="fas fa-arrow-left"></i></button>
+                <h1 id="profile-page-title" class="text-xl font-semibold text-[var(--color-text-primary)]">โปรไฟล์และรถยนต์</h1>
+                <div class="w-9"></div>
+            </header>
+            <div id="salesperson-profile-content" class="app-body p-4 bg-[var(--color-background)] space-y-4"></div>
+        </div>
+        
+        <!-- Vehicle Maintenance Page -->
+        <div id="vehicle-maintenance-page" class="page">
+             <header class="bg-[var(--color-header)]/80 backdrop-blur-sm text-white p-4 flex justify-between items-center sticky top-0 z-10 border-b border-[var(--color-border)]">
+                <button id="back-to-profile-btn" class="text-xl h-9 w-9 flex items-center justify-center rounded-full hover:bg-[var(--color-icon-hover-bg)] transition-colors text-[var(--color-text-secondary)]"><i class="fas fa-arrow-left"></i></button>
+                <h1 class="text-xl font-semibold text-[var(--color-text-primary)]">ประวัติการซ่อมบำรุง</h1>
+                <div class="w-9"></div>
+            </header>
+            <div class="app-body p-4 bg-[var(--color-background)]">
+                 <div id="maintenance-history-content" class="space-y-3"></div>
+            </div>
+             <button id="add-maintenance-btn" class="fixed bottom-6 right-6 bg-[var(--color-accent)] text-slate-900 w-16 h-16 rounded-2xl shadow-lg shadow-amber-400/20 flex items-center justify-center text-3xl hover:opacity-90 transition-transform hover:scale-105 active:scale-100 z-20"><i class="fas fa-plus"></i></button>
+        </div>
+
+        <!-- Customer Detail Page -->
+        <div id="customer-detail-page" class="page">
+            <header class="bg-[var(--color-header)]/80 backdrop-blur-sm text-white p-4 flex items-center sticky top-0 z-10 border-b border-[var(--color-border)]">
+                <button id="back-to-main-btn" class="text-xl mr-4 h-9 w-9 flex items-center justify-center rounded-full hover:bg-[var(--color-icon-hover-bg)] transition-colors text-[var(--color-text-secondary)]"><i class="fas fa-arrow-left"></i></button>
+                <h1 id="customer-name-header" class="text-xl font-semibold truncate text-[var(--color-text-primary)]">รายละเอียดลูกค้า</h1>
+            </header>
+            <div id="customer-detail-content" class="app-body p-4 bg-[var(--color-background)] pb-24"></div>
+            <div class="p-4 grid grid-cols-2 gap-4 bg-[var(--color-card)] border-t border-[var(--color-border)] sticky bottom-0 z-10">
+                <button id="edit-customer-btn" class="w-full bg-amber-500 text-slate-900 py-3 rounded-lg font-semibold hover:bg-amber-400 transition shadow-sm shadow-amber-300/20"><i class="fas fa-edit mr-2"></i>แก้ไขข้อมูล</button>
+                <button id="go-to-sale-btn" class="w-full bg-emerald-500 text-white py-3 rounded-lg font-semibold hover:bg-emerald-600 transition shadow-sm shadow-emerald-300/20"><i class="fas fa-shopping-cart mr-2"></i>ขายสินค้า</button>
+            </div>
+        </div>
+
+        <!-- Sales Page -->
+        <div id="sales-page" class="page">
+             <header class="bg-[var(--color-header)]/80 backdrop-blur-sm text-white p-4 flex items-center sticky top-0 z-10 border-b border-[var(--color-border)]">
+                <button id="back-to-main-from-sales-btn" class="text-xl mr-4 h-9 w-9 flex items-center justify-center rounded-full hover:bg-[var(--color-icon-hover-bg)] transition-colors text-[var(--color-text-secondary)]"><i class="fas fa-arrow-left"></i></button>
+                <div><h1 id="sales-page-title" class="text-xl font-semibold text-[var(--color-text-primary)]">ขายสินค้า</h1><p id="sale-customer-name" class="text-sm opacity-90"></p></div>
+            </header>
+            <div class="app-body overflow-y-auto bg-[var(--color-background)]">
+                <div class="p-4 bg-[var(--color-card)]"><h2 class="text-lg font-semibold text-[var(--color-text-primary)] mb-2 flex items-center"><i class="fas fa-plus-circle text-emerald-500 mr-2"></i>รายการขาย (เพิ่มสต็อกลูกค้า)</h2><div id="product-list-for-sale" class="space-y-2 max-h-60 overflow-y-auto"></div></div>
+                <div class="p-4 bg-[var(--color-card)] border-t border-[var(--color-border)]"><h2 class="text-lg font-semibold text-[var(--color-text-primary)] mb-2 flex items-center"><i class="fas fa-minus-circle text-red-500 mr-2"></i>รายการรับคืน (ลดสต็อกลูกค้า)</h2><div id="product-list-for-return" class="space-y-2 max-h-60 overflow-y-auto"></div></div>
+                <div class="p-4 border-t-2 border-[var(--color-border)] bg-[var(--color-background)]"><h2 class="text-lg font-semibold text-[var(--color-text-primary)] mb-2">สรุปรายการ</h2><div id="summary-items" class="space-y-2"></div><div class="text-right font-bold text-xl mt-4 text-[var(--color-text-primary)]">ยอดขายรวม: <span id="total-amount" class="text-[var(--color-accent)]">0.00</span> บาท</div><details class="mt-4 bg-[var(--color-card)] p-2 rounded-xl shadow-sm"><summary class="font-medium cursor-pointer text-sm text-[var(--color-text-secondary)]">ดูประวัติการซื้อล่าสุด</summary><div id="sales-history-on-sale-page" class="mt-2 text-sm space-y-2 max-h-40 overflow-y-auto border-t border-[var(--color-border)] pt-2"></div></details><button id="confirm-sale-btn" class="mt-4 w-full bg-amber-500 text-slate-900 py-3 rounded-lg font-semibold hover:bg-amber-400 transition disabled:bg-slate-600 shadow-md shadow-amber-400/20"><i class="fas fa-check-circle mr-2"></i>ยืนยันการขาย</button></div>
+            </div>
+        </div>
+
+        <!-- Customer Stock Page -->
+        <div id="customer-stock-page" class="page">
+            <header class="bg-[var(--color-header)]/80 backdrop-blur-sm text-white p-4 flex items-center sticky top-0 z-10 border-b border-[var(--color-border)]">
+                <button id="back-to-main-from-stock-btn" class="text-xl mr-4 h-9 w-9 flex items-center justify-center rounded-full hover:bg-[var(--color-icon-hover-bg)] transition-colors text-[var(--color-text-secondary)]"><i class="fas fa-arrow-left"></i></button>
+                <div><h1 class="text-xl font-semibold text-[var(--color-text-primary)]">สต็อกสินค้าลูกค้า</h1><p id="stock-customer-name" class="text-sm opacity-90"></p></div>
+            </header>
+            <div class="app-body p-4 bg-[var(--color-background)]"><div id="stock-list-container" class="space-y-2"></div></div>
+            <div class="p-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-card)]"><button id="save-stock-btn" class="w-full bg-amber-500 text-slate-900 py-3 rounded-lg font-semibold hover:bg-amber-400 transition shadow-md shadow-amber-400/20"><i class="fas fa-save mr-2"></i>บันทึกการเปลี่ยนแปลง</button></div>
+        </div>
+
+        <!-- Modals -->
+        <div id="customer-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-30 hidden p-4">
+            <div class="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-[var(--color-border)]">
+                <h2 id="modal-title" class="text-2xl font-bold text-[var(--color-text-primary)] mb-4"></h2>
+                <form id="customer-form" class="space-y-4">
+                    <input type="hidden" id="customer-id">
+                    <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">ชื่อ-สกุล</label><input type="text" id="customer-name" class="mt-1 block w-full rounded-md p-2 transition border" required></div>
+                    <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">ที่อยู่</label><input type="text" id="customer-address" class="mt-1 block w-full rounded-md p-2 transition border"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">อำเภอ</label><input type="text" id="customer-district" class="mt-1 block w-full rounded-md p-2 transition border"></div>
+                        <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">ตำบล</label><input type="text" id="customer-sub-district" class="mt-1 block w-full rounded-md p-2 transition border"></div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-[var(--color-text-secondary)]">หมู่บ้าน</label>
+                        <select id="customer-village" class="mt-1 block w-full rounded-md p-2 transition border"></select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">เบอร์โทร</label><input type="tel" id="customer-phone" class="mt-1 block w-full rounded-md p-2 transition border"></div>
+                    <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">รายละเอียดเพิ่มเติม</label><textarea id="customer-notes" class="mt-1 block w-full rounded-md p-2 transition border" rows="3"></textarea></div>
+                    <div>
+                        <label class="block text-sm font-medium text-[var(--color-text-secondary)]">พิกัด (Lat,Lng)</label>
+                        <div id="location-status" class="text-xs text-amber-400 bg-amber-900/50 p-2 rounded-md my-2 hidden"></div>
+                        <div class="flex items-center space-x-2">
+                            <input type="text" id="customer-lat" class="mt-1 block w-full rounded-md p-2 transition border" placeholder="Latitude">
+                            <input type="text" id="customer-lng" class="mt-1 block w-full rounded-md p-2 transition border" placeholder="Longitude">
+                            <button type="button" id="get-current-location-btn" class="p-2 bg-sky-500 text-white rounded-md flex-shrink-0 hover:bg-sky-600 transition" title="ดึงพิกัดปัจจุบัน"><i class="fas fa-crosshairs"></i></button>
+                            <button type="button" id="open-map-btn" class="p-2 bg-blue-600 text-white rounded-md flex-shrink-0 hover:bg-blue-700 transition" title="เปิดแผนที่"><i class="fas fa-map-marked-alt"></i></button>
+                        </div>
+                        <div id="mini-map-container" class="mt-2"><div id="mini-map"></div></div>
+                        <div class="mt-4"><label class="block text-sm font-medium text-[var(--color-text-secondary)]">หรือวางพิกัดโดยตรง</label><p class="text-xs text-slate-500 mb-1">เช่น (19.2563, 100.2636)</p><div class="flex items-center space-x-2"><input type="text" id="coords-input" class="mt-1 block w-full rounded-md p-2 transition border" placeholder="วางพิกัดที่คัดลอกมา"><button type="button" id="parse-coords-btn" class="p-2 bg-emerald-500 text-white rounded-md flex-shrink-0 hover:bg-emerald-600 transition">ดึงค่า</button></div></div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-[var(--color-text-secondary)]">รูปภาพ (เลือกได้หลายรูป)</label>
+                        <div id="existing-images-container" class="mt-2 grid grid-cols-3 gap-2"></div>
+                        <div id="image-preview-container" class="mt-2 grid grid-cols-3 gap-2"></div>
+                        <label for="customer-images-input" class="mt-2 inline-block cursor-pointer w-full text-center bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2 px-4 rounded-lg transition"><i class="fas fa-plus-circle mr-2"></i>เพิ่มรูปภาพ</label>
+                        <input type="file" id="customer-images-input" multiple accept="image/*" class="hidden">
+                    </div>
+                    <div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-customer-btn" class="px-4 py-2 bg-slate-600 text-slate-200 rounded-md hover:bg-slate-500 transition">ยกเลิก</button><button type="submit" class="px-4 py-2 bg-amber-500 text-slate-900 font-semibold rounded-md hover:bg-amber-400 transition">บันทึก</button></div>
+                </form>
+            </div>
+        </div>
+
+        <div id="map-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-40 hidden p-4"><div class="bg-slate-800 rounded-xl p-4 w-full max-w-2xl border border-slate-700"><h2 class="text-xl font-bold text-slate-100 mb-2">เลือกตำแหน่งบนแผนที่</h2><p class="text-sm text-slate-400 mb-4">ลากหมุดไปยังตำแหน่งที่ต้องการ แล้วกดยืนยัน</p><div id="map" style="height: 50vh;"></div><div class="flex justify-end space-x-3 mt-4"><button type="button" id="cancel-map-btn" class="px-4 py-2 bg-slate-600 rounded-md hover:bg-slate-500 transition">ยกเลิก</button><button type="button" id="confirm-map-btn" class="px-4 py-2 bg-amber-500 text-slate-900 font-semibold rounded-md hover:bg-amber-400 transition">ยืนยัน</button></div></div></div>
+        <div id="stock-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-40 hidden p-4"><div class="bg-slate-800 rounded-xl p-6 w-full max-w-sm border border-slate-700"><h2 id="stock-modal-title" class="text-xl font-bold text-slate-100 mb-4">ปรับสต็อก</h2><form id="stock-form"><input type="hidden" id="stock-product-id"><label class="block text-sm font-medium text-slate-400">จำนวนคงเหลือจริง</label><input type="number" id="stock-quantity-input" class="mt-1 block w-full rounded-md p-2 transition" required><div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-stock-btn" class="px-4 py-2 bg-slate-600 rounded-md hover:bg-slate-500 transition">ยกเลิก</button><button type="submit" class="px-4 py-2 bg-amber-500 text-slate-900 font-semibold rounded-md hover:bg-amber-400 transition">บันทึก</button></div></form></div></div>
+        <div id="image-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 hidden p-4">
+            <div class="relative">
+                 <img id="modal-image" src="" class="max-w-full max-h-[90vh] rounded-lg">
+                 <button id="close-image-modal" class="absolute -top-2 -right-2 bg-white text-black rounded-full w-8 h-8 flex items-center justify-center text-lg shadow-lg">×</button>
+            </div>
+        </div>
+        
+        <!-- Maintenance Modal -->
+        <div id="maintenance-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-30 hidden p-4">
+            <div class="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-[var(--color-border)]">
+                <h2 id="maintenance-modal-title" class="text-2xl font-bold text-[var(--color-text-primary)] mb-4">เพิ่มรายการซ่อมบำรุง</h2>
+                <form id="maintenance-form" class="space-y-4">
+                    <input type="hidden" id="maintenance-id">
+                    <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">รายการ</label><input type="text" id="maintenance-item-name" class="mt-1 block w-full rounded-md p-2 transition border" required></div>
+                    <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">รายละเอียด (Note)</label><textarea id="maintenance-note" class="mt-1 block w-full rounded-md p-2 transition border" rows="3"></textarea></div>
+                    <div><label class="block text-sm font-medium text-[var(--color-text-secondary)]">ค่าใช้จ่าย (บาท)</label><input type="number" step="0.01" id="maintenance-cost" class="mt-1 block w-full rounded-md p-2 transition border"></div>
+                    <div>
+                        <label class="block text-sm font-medium text-[var(--color-text-secondary)]">รูปภาพ</label>
+                        <div id="existing-maintenance-images-container" class="mt-2 grid grid-cols-3 gap-2"></div>
+                        <div id="maintenance-image-preview-container" class="mt-2 grid grid-cols-3 gap-2"></div>
+                        <label for="maintenance-images-input" class="mt-2 inline-block cursor-pointer w-full text-center bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2 px-4 rounded-lg transition"><i class="fas fa-plus-circle mr-2"></i>เพิ่มรูปภาพ</label>
+                        <input type="file" id="maintenance-images-input" multiple accept="image/*" class="hidden">
+                    </div>
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" id="cancel-maintenance-btn" class="px-4 py-2 bg-slate-600 text-slate-200 rounded-md hover:bg-slate-500 transition">ยกเลิก</button>
+                        <button type="submit" class="px-4 py-2 bg-amber-500 text-slate-900 font-semibold rounded-md hover:bg-amber-400 transition">บันทึก</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PWA Install Banner (Moved outside app-container) -->
+    <div id="install-banner" class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto p-4 z-40">
+        <div class="bg-slate-800 text-white p-4 rounded-lg shadow-2xl flex items-center justify-between gap-4 border border-slate-700">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-download text-2xl text-amber-400"></i>
+                <div>
+                    <h4 class="font-bold">ติดตั้งแอป Namtip Water</h4>
+                    <p class="text-sm text-slate-400">เพิ่มลงในหน้าจอหลักเพื่อการเข้าถึงที่รวดเร็ว</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button id="install-btn" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold py-2 px-4 rounded-lg transition">ติดตั้ง</button>
+                <button id="dismiss-install-btn" class="text-slate-400 hover:text-white py-2 px-3 rounded-lg transition">&times;</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// --- Service Worker Registration ---
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('ServiceWorker registration successful:', registration.scope);
+        }, err => {
+            console.log('ServiceWorker registration failed:', err);
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // --- CONFIGURATION ---
+    const SUPABASE_URL = 'https://borfxmrensuzmxayncvf.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvcmZ4bXJlbnN1em14YXluY3ZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY2MDA5MzEsImV4cCI6MjA2MjE3NjkzMX0.ny7tEHckNEN5ncLKYS7h5rTL8jasHvUz9KpePnuIi7Q';
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const IMAGE_BUCKET = 'customer.images';
+    const PROFILE_PIC_BUCKET = 'profile.pictures';
+    const MAINTENANCE_IMAGE_BUCKET = 'maintenance_images';
+
+    // --- GLOBAL STATE ---
+    let currentSalesperson = null;
+    let allCustomers = [];
+    let currentCustomer = null;
+    let allProducts = [];
+    let cart = {};
+    let returnsCart = {};
+    let customerStock = new Map();
+    let map, marker, miniMap, miniMarker, overviewMap;
+    let selectedImageFiles = [];
+    let imagesToDelete = [];
+    let selectedMaintenanceImageFiles = [];
+    let maintenanceImagesToDelete = [];
+    let editModeState = { isEditing: false, transactionId: null };
+    let currentSort = { type: 'date', ascending: false };
+    let currentUserLocation = null;
+    let deferredPrompt; // For PWA installation
+    let activePage = 'home';
+    let customerSubscription = null; // For real-time updates
+
+    // --- UI ELEMENTS ---
+    const pages = {
+        home: document.getElementById('home-page'),
+        main: document.getElementById('main-content'),
+        customerDetail: document.getElementById('customer-detail-page'),
+        sales: document.getElementById('sales-page'),
+        customerStock: document.getElementById('customer-stock-page'),
+        salespersonProfile: document.getElementById('salesperson-profile-page'),
+        vehicleMaintenance: document.getElementById('vehicle-maintenance-page')
+    };
+    const mainViews = {
+        customerListPage: document.getElementById('customer-list-page'),
+        salesSummaryPage: document.getElementById('sales-summary-page'),
+        overviewMapPage: document.getElementById('overview-map-page')
+    };
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const toast = document.getElementById('toast');
+    const salespersonSelection = document.getElementById('salesperson-selection');
+    const salespersonInfo = document.getElementById('salesperson-info');
+    const headerTitle = document.getElementById('header-title');
+    const customerList = document.getElementById('customer-list');
+    const searchInput = document.getElementById('search-input');
+    const villageFilter = document.getElementById('village-filter');
+    const subDistrictFilter = document.getElementById('sub-district-filter');
+    const sortDateBtn = document.getElementById('sort-date-btn');
+    const sortDistBtn = document.getElementById('sort-dist-btn');
+    const customerDetailContent = document.getElementById('customer-detail-content');
+    const customerNameHeader = document.getElementById('customer-name-header');
+    const productListForSale = document.getElementById('product-list-for-sale');
+    const productListForReturn = document.getElementById('product-list-for-return');
+    const saleCustomerName = document.getElementById('sale-customer-name');
+    const salesPageTitle = document.getElementById('sales-page-title');
+    const summaryItems = document.getElementById('summary-items');
+    const totalAmountEl = document.getElementById('total-amount');
+    const confirmSaleBtn = document.getElementById('confirm-sale-btn');
+    const salesHistoryOnSalePage = document.getElementById('sales-history-on-sale-page');
+    const salesSummaryContent = document.getElementById('sales-summary-content');
+    const customerModal = document.getElementById('customer-modal');
+    const customerForm = document.getElementById('customer-form');
+    const mapModal = document.getElementById('map-modal');
+    const stockModal = document.getElementById('stock-modal');
+    const stockForm = document.getElementById('stock-form');
+    const imagePreviewContainer = document.getElementById('image-preview-container');
+    const existingImagesContainer = document.getElementById('existing-images-container');
+    const customerImagesInput = document.getElementById('customer-images-input');
+    const miniMapDiv = document.getElementById('mini-map');
+    const locationStatus = document.getElementById('location-status');
+    const coordsInput = document.getElementById('coords-input');
+    const parseCoordsBtn = document.getElementById('parse-coords-btn');
+    const stockCustomerName = document.getElementById('stock-customer-name');
+    const stockListContainer = document.getElementById('stock-list-container');
+    const saveStockBtn = document.getElementById('save-stock-btn');
+    const navButtons = document.querySelectorAll('.nav-btn');
+    const viewRangeBtn = document.getElementById('view-range-btn');
+    const customRangeSummary = document.getElementById('custom-range-summary');
+    const imageModal = document.getElementById('image-modal');
+    const modalImage = document.getElementById('modal-image');
+    const imageModalSpinner = document.getElementById('image-modal-spinner');
+    const getCurrentLocationBtn = document.getElementById('get-current-location-btn');
+    const installAppBtn = document.getElementById('install-app-btn');
+    const installBanner = document.getElementById('install-banner');
+    const installBtn = document.getElementById('install-btn');
+    const dismissInstallBtn = document.getElementById('dismiss-install-btn');
+    const salespersonProfileContent = document.getElementById('salesperson-profile-content');
+    const maintenanceHistoryContent = document.getElementById('maintenance-history-content');
+    const maintenanceModal = document.getElementById('maintenance-modal');
+    const maintenanceForm = document.getElementById('maintenance-form');
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    const maintenanceImagesInput = document.getElementById('maintenance-images-input');
+    const maintenanceImagePreviewContainer = document.getElementById('maintenance-image-preview-container');
+    const existingMaintenanceImagesContainer = document.getElementById('existing-maintenance-images-container');
+
+
+    // --- HELPER & UTILITY FUNCTIONS ---
+    const showLoading = () => loadingSpinner.classList.remove('hidden');
+    const hideLoading = () => loadingSpinner.classList.add('hidden');
+
+    const showToast = (message, type = 'info', duration = 3000) => {
+        toast.textContent = message;
+        toast.className = ''; // Clear classes
+        toast.classList.add('show', type);
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, duration);
+    };
+
+    const showPage = (pageName, direction = 'forward') => {
+        if (activePage === pageName) return;
+
+        const currentPage = pages[activePage];
+        const nextPage = pages[pageName];
+
+        if (currentPage) {
+            const outAnimation = direction === 'forward' ? 'slide-out-left' : 'slide-out-right';
+            currentPage.classList.add('exiting', outAnimation);
+        }
+
+        if (nextPage) {
+            const inAnimation = direction === 'forward' ? 'slide-in-right' : 'slide-in-left';
+            nextPage.classList.remove('slide-out-left', 'slide-out-right'); // Clean up old animations
+            nextPage.classList.add('active', inAnimation);
+        }
+        
+        if (pageName === 'home' || activePage === 'home') {
+             if (currentPage) currentPage.classList.replace('slide-out-left', 'fade-out');
+             if (nextPage) nextPage.classList.replace('slide-in-right', 'fade-in');
+        }
+
+        setTimeout(() => {
+            if (currentPage) {
+                currentPage.classList.remove('active', 'exiting', 'slide-out-left', 'slide-out-right', 'fade-out');
+            }
+        }, 300); 
+
+        activePage = pageName;
+    };
+
+    const formatDateTime = (dateString) => {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    };
+    
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('th-TH', { day: '2-digit', month: 'long', year: 'numeric' });
+    };
+
+
+    const formatCurrency = (amount) => {
+        if (typeof amount !== 'number') return '0.00';
+        return amount.toLocaleString('th-TH', { style: 'currency', currency: 'THB' }).replace('฿', '');
+    };
+    
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+        const R = 6371; 
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; 
+    };
+
+    const resizeImage = (file, maxWidth = 1024, maxHeight = 1024) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height *= maxWidth / width;
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width *= maxHeight / height;
+                            height = maxHeight;
+                        }
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    canvas.toBlob((blob) => {
+                        resolve(new File([blob], file.name, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        }));
+                    }, 'image/jpeg', 0.8); // Adjust quality here (0.8 = 80%)
+                };
+                img.onerror = (error) => reject(error);
+            };
+            reader.onerror = (error) => reject(error);
+        });
+    };
+
+    // --- THEME SWITCHER ---
+    const applyTheme = (theme) => {
+        const themeIcon = themeToggleBtn.querySelector('i');
+        if (theme === 'light') {
+            document.body.classList.add('light-theme');
+            themeIcon.classList.remove('fa-sun');
+            themeIcon.classList.add('fa-moon');
+        } else {
+            document.body.classList.remove('light-theme');
+            themeIcon.classList.remove('fa-moon');
+            themeIcon.classList.add('fa-sun');
+        }
+    };
+
+    const toggleTheme = () => {
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', newTheme);
+        applyTheme(newTheme);
+    };
+
+    // --- INITIALIZATION ---
+    const initializeApp = async () => {
+        showLoading();
+        
+        // Apply saved theme or default to dark
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        applyTheme(savedTheme);
+
+        resetFilters();
+        await Promise.all([fetchSalespeople(), fetchProducts()]);
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('start-date-input').value = today;
+        document.getElementById('end-date-input').value = today;
+        hideLoading();
+    };
+
+    const fetchSalespeople = async () => {
+        const { data: salespeople, error } = await db.from('salespeople').select('*, customers(count)');
+        if (error) {
+            console.error('Error fetching salespeople with customer count', error);
+            if (error.message.includes('relation "customers" does not exist')) {
+                 console.error("Hint: Make sure you have a foreign key relationship set up in Supabase from 'customers.salesperson_id' to 'salespeople.id'.");
+                 showToast('เกิดข้อผิดพลาด: ไม่สามารถนับจำนวนลูกค้าได้', 'error', 5000);
+                 const { data: fallbackSalespeople, error: fallbackError } = await db.from('salespeople').select('*');
+                 if(fallbackError) {
+                     salespersonSelection.innerHTML = `<div class="col-span-full text-center text-red-500 bg-red-100 p-4 rounded-lg">เกิดข้อผิดพลาด: ${fallbackError.message}</div>`;
+                     return;
+                 }
+                 fallbackSalespeople.forEach(sp => sp.customers = [{count: 'N/A'}]); // Add placeholder
+                 renderSalespersonSelection(fallbackSalespeople);
+                 return;
+            }
+            salespersonSelection.innerHTML = `<div class="col-span-full text-center text-red-500 bg-red-100 p-4 rounded-lg">เกิดข้อผิดพลาด: ${error.message}</div>`;
+            return;
+        }
+        salespeople.sort((a, b) => a.id - b.id);
+        renderSalespersonSelection(salespeople);
+    };
+
+    const fetchProducts = async () => {
+        const { data, error } = await db.from('products').select('*').order('name');
+        if (error) { console.error('Error fetching products', error); return; }
+        allProducts = data;
+    };
+
+    const renderSalespersonSelection = (salespeople) => {
+        salespersonSelection.innerHTML = '';
+        if (!salespeople || salespeople.length === 0) {
+            salespersonSelection.innerHTML = `<div class="text-center text-yellow-700 bg-yellow-100 p-4 rounded-xl"><p class="font-bold">ไม่พบข้อมูลพนักงานขาย</p><p class="text-sm">กรุณาเพิ่มข้อมูลในตาราง 'salespeople'</p></div>`;
+            return;
+        }
+        salespeople.forEach(sp => {
+            const customerCount = (sp.customers && sp.customers.length > 0) ? sp.customers[0].count : 0;
+            const card = document.createElement('div');
+            card.className = 'bg-[var(--color-card)] rounded-xl shadow-lg border border-[var(--color-border)] overflow-hidden flex flex-col transition-transform hover:scale-[1.02] active:scale-100';
+            
+            const mainButton = document.createElement('button');
+            mainButton.className = 'w-full p-4 text-left hover:bg-slate-700/50 transition flex items-center justify-between gap-4';
+            mainButton.innerHTML = `
+                <div class="flex items-center gap-4">
+                    <img src="${sp.profile_pic_url || 'https://placehold.co/64x64/334155/facc15?text=' + sp.name.charAt(0)}" data-full-src="${sp.profile_pic_url}" class="salesperson-pic w-16 h-16 rounded-full object-cover border-2 border-slate-600 shadow-md cursor-pointer">
+                    <div>
+                        <h3 class="font-semibold text-lg text-[var(--color-text-primary)]">${sp.name}</h3>
+                        ${sp.license_plate ? `<p class="text-sm text-[var(--color-text-secondary)] font-mono">${sp.license_plate}</p>` : ''}
+                    </div>
+                </div>
+                <div class="text-center flex-shrink-0">
+                    <p class="text-2xl font-bold text-[var(--color-accent)]">${customerCount}</p>
+                    <p class="text-xs text-[var(--color-text-secondary)] -mt-1">ลูกค้า</p>
+                </div>
+            `;
+            mainButton.addEventListener('click', () => selectSalesperson(sp));
+
+            const profileButton = document.createElement('button');
+            profileButton.className = 'w-full bg-slate-900 p-2 text-sm text-slate-400 hover:bg-slate-700 transition border-t border-slate-700';
+            profileButton.innerHTML = '<i class="fas fa-user-cog mr-2"></i>จัดการโปรไฟล์';
+            profileButton.addEventListener('click', () => showSalespersonProfile(sp));
+
+            card.appendChild(mainButton);
+            card.appendChild(profileButton);
+            salespersonSelection.appendChild(card);
+        });
+
+        document.querySelectorAll('.salesperson-pic').forEach(img => {
+            img.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const fullSrc = e.target.dataset.fullSrc;
+                if(fullSrc && fullSrc !== 'null') {
+                    openImageModal(e.target.src, fullSrc);
+                }
+            });
+        });
+    };
+
+    // --- REAL-TIME SUBSCRIPTION ---
+    const subscribeToCustomerChanges = (salespersonId) => {
+        const channelName = `customers-for-salesperson-${salespersonId}`;
+        customerSubscription = db.channel(channelName)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*', // Listen to INSERT, UPDATE, DELETE
+                    schema: 'public',
+                    table: 'customers',
+                    filter: `salesperson_id=eq.${salespersonId}`,
+                },
+                (payload) => {
+                    console.log('Change received!', payload);
+                    showToast('รายการลูกค้ามีการเปลี่ยนแปลง', 'info', 2000);
+                    fetchCustomers(salespersonId);
+                }
+            )
+            .subscribe((status, err) => {
+                 if (status === 'SUBSCRIBED') {
+                    console.log(`Successfully subscribed to ${channelName}`);
+                 }
+                 if (status === 'CHANNEL_ERROR') {
+                    console.error(`Failed to subscribe to ${channelName}:`, err);
+                    showToast('เชื่อมต่อ Real-time ไม่สำเร็จ', 'error', 8000);
+                    console.error('Hint: This is often caused by Row Level Security (RLS) not being enabled on the table, or the table not being added to the replication publication. Please check your Supabase settings under "Database" -> "Replication" and ensure the "customers" table is enabled for real-time updates.');
+                 }
+            });
+    };
+
+    // --- NAVIGATION & DATA FLOW ---
+    const selectSalesperson = async (salesperson) => {
+        showLoading();
+        currentSalesperson = salesperson;
+
+        if (customerSubscription) {
+            db.removeChannel(customerSubscription);
+            customerSubscription = null;
+        }
+
+        salespersonInfo.innerHTML = `<div class="flex items-center gap-2"><img src="${salesperson.profile_pic_url || 'https://placehold.co/24x24/dbeafe/2563eb?text=' + salesperson.name.charAt(0)}" class="w-6 h-6 rounded-full inline-block border border-blue-400"><span class="font-semibold truncate">${salesperson.name}</span></div>`;
+        await fetchCustomers(salesperson.id);
+        
+        subscribeToCustomerChanges(salesperson.id); 
+        
+        showPage('main');
+        showMainView('customer-list-page');
+        hideLoading();
+    };
+
+    const showMainView = (viewId) => {
+        const viewTitles = { 'customer-list-page': 'ลูกค้า', 'sales-summary-page': 'สรุปยอดขาย', 'overview-map-page': 'แผนที่ภาพรวม' };
+        headerTitle.textContent = viewTitles[viewId] || 'ลูกค้า';
+
+        Object.values(mainViews).forEach(v => v.classList.remove('active'));
+        document.getElementById(viewId)?.classList.add('active');
+
+        navButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === viewId);
+        });
+
+        if (viewId === 'overview-map-page') initOverviewMap();
+        if (viewId === 'sales-summary-page') renderSalesSummary();
+    };
+
+    const fetchCustomers = async (salespersonId) => {
+        const { data: customers, error } = await db.from('customers').select('*').eq('salesperson_id', salespersonId);
+        if (error) {
+            console.error('Error fetching customers:', error);
+            showToast('ไม่สามารถดึงข้อมูลลูกค้าได้', 'error');
+            allCustomers = [];
+        } else {
+            const customerIds = customers.map(c => c.id);
+            if (customerIds.length === 0) {
+                allCustomers = [];
+                applySort();
+                populateDynamicFilters(allCustomers);
+                return;
+            }
+            const [imageResults, lastSaleResults, stockResults] = await Promise.all([
+                db.from('customer_images').select('customer_id, image_url').in('customer_id', customerIds),
+                db.from('sales_records').select('customer_id, sale_date').in('customer_id', customerIds).order('sale_date', { ascending: false }),
+                db.from('customer_stock').select('customer_id, quantity, products(name)').in('customer_id', customerIds).order('quantity', { ascending: false })
+            ]);
+
+            const imageMap = new Map();
+            imageResults.data.forEach(img => {
+                if (!imageMap.has(img.customer_id)) {
+                    imageMap.set(img.customer_id, img.image_url);
+                }
+            });
+            const lastSaleMap = new Map();
+            lastSaleResults.data.forEach(sale => { if (!lastSaleMap.has(sale.customer_id)) lastSaleMap.set(sale.customer_id, sale.sale_date); });
+            const stockMap = new Map();
+            stockResults.data.forEach(stock => {
+                if (!stockMap.has(stock.customer_id)) stockMap.set(stock.customer_id, []);
+                if (stockMap.get(stock.customer_id).length < 2) stockMap.get(stock.customer_id).push({ name: stock.products.name, quantity: stock.quantity });
+            });
+            customers.forEach(customer => {
+                customer.image_url = imageMap.get(customer.id) || null;
+                customer.last_sale_date = lastSaleMap.get(customer.id) || null;
+                customer.stock = stockMap.get(customer.id) || [];
+            });
+            allCustomers = customers;
+        }
+        populateDynamicFilters(allCustomers);
+        applySort();
+    };
+
+    // --- UI RENDERING & FILTERING ---
+    const resetFilters = () => {
+        villageFilter.innerHTML = '<option value="">ทั้งหมด</option>';
+        subDistrictFilter.innerHTML = '<option value="">ทั้งหมด</option>';
+    }
+
+    const populateDynamicFilters = (customers) => {
+        const villages = [...new Set(customers.map(c => c.village).filter(v => v != null && v !== ''))].sort((a, b) => a - b);
+        villageFilter.innerHTML = '<option value="">ทั้งหมด</option>';
+        villages.forEach(v => {
+            const option = document.createElement('option');
+            option.value = v;
+            option.textContent = `หมู่ ${v}`;
+            villageFilter.appendChild(option);
+        });
+        
+        const subDistricts = [...new Set(customers.map(c => c.sub_district).filter(sd => sd != null && sd !== ''))].sort((a, b) => a.localeCompare(b, 'th'));
+        subDistrictFilter.innerHTML = '<option value="">ทั้งหมด</option>';
+        subDistricts.forEach(sd => {
+            const option = document.createElement('option');
+            option.value = sd;
+            option.textContent = sd;
+            subDistrictFilter.appendChild(option);
+        });
+    };
+
+    const updateCustomerListView = () => {
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedVillage = villageFilter.value;
+        const selectedSubDistrict = subDistrictFilter.value;
+
+        let filteredCustomers = allCustomers;
+
+        if (searchTerm) {
+            filteredCustomers = filteredCustomers.filter(c => 
+                c.name.toLowerCase().includes(searchTerm) || 
+                (c.id_txt && c.id_txt.toLowerCase().includes(searchTerm))
+            );
+        }
+
+        if (selectedSubDistrict) {
+            filteredCustomers = filteredCustomers.filter(c => c.sub_district === selectedSubDistrict);
+        }
+
+        if (selectedVillage) {
+            filteredCustomers = filteredCustomers.filter(c => c.village == selectedVillage);
+        }
+
+        renderCustomerList(filteredCustomers);
+    };
+
+    const applySort = () => {
+        allCustomers.forEach(c => {
+            if (c.last_sale_date) {
+                const today = new Date(); today.setHours(0, 0, 0, 0);
+                const lastSale = new Date(c.last_sale_date); lastSale.setHours(0, 0, 0, 0);
+                c.diffDays = Math.ceil(Math.abs(today - lastSale) / (1000 * 60 * 60 * 24));
+            } else {
+                c.diffDays = Infinity;
+            }
+        });
+
+        if (currentSort.type === 'date') {
+            allCustomers.sort((a, b) => {
+                if (a.diffDays === Infinity) return 1;
+                if (b.diffDays === Infinity) return -1;
+                return currentSort.ascending ? a.diffDays - b.diffDays : b.diffDays - a.diffDays;
+            });
+        } else if (currentSort.type === 'distance' && currentUserLocation) {
+            allCustomers.forEach(c => {
+                c.distance = (c.lat && c.lng) ? calculateDistance(currentUserLocation.lat, currentUserLocation.lng, c.lat, c.lng) : Infinity;
+            });
+            allCustomers.sort((a, b) => a.distance - b.distance);
+        }
+        updateCustomerListView();
+    };
+
+    const renderCustomerList = (customersToRender) => {
+        const placeholderIcon = (name) => `<div class="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center"><span class="text-xl font-bold text-amber-400">${name.charAt(0)}</span></div>`;
+        customerList.innerHTML = customersToRender.length === 0
+            ? `<div class="text-center text-slate-400 p-8">ไม่พบข้อมูลลูกค้าที่ตรงกัน</div>`
+            : customersToRender.map((c, index) => {
+                const cardBgClass = index % 2 !== 0 ? 'bg-[var(--color-card-alt)]' : 'bg-[var(--color-card)]';
+                const thumbnailUrl = c.image_url ? `${c.image_url}?width=128&height=128` : null;
+                const imageHtml = thumbnailUrl ? `<img src="${thumbnailUrl}" data-full-src="${c.image_url}" class="customer-list-pic w-12 h-12 rounded-full object-cover border-2 border-slate-600 shadow-sm cursor-pointer">` : placeholderIcon(c.name);
+                
+                let lastSaleInfoHtml = `<p class="text-sm text-[var(--color-text-secondary)] flex items-center"><i class="fas fa-times-circle mr-1.5"></i>ยังไม่มีการขาย</p>`;
+                if (c.last_sale_date) {
+                    let daysAgoClass = 'text-slate-300';
+                    if (c.diffDays >= 7) daysAgoClass = 'text-red-400 font-bold';
+                    else if (c.diffDays >= 4) daysAgoClass = 'text-amber-400 font-semibold';
+                    lastSaleInfoHtml = `<div class="flex items-center gap-x-4 flex-wrap"><p class="text-sm text-[var(--color-text-secondary)] flex items-center"><i class="fas fa-history mr-1.5"></i>${formatDateTime(c.last_sale_date)}</p><p class="text-sm ${daysAgoClass} flex items-center"><i class="fas fa-hourglass-half mr-1.5"></i>${c.diffDays} วัน</p></div>`;
+                }
+
+                const distanceHtml = (currentSort.type === 'distance' && c.distance !== Infinity) ? `<p class="text-sm text-sky-400 font-medium flex items-center mt-1"><i class="fas fa-road mr-1.5"></i>${c.distance.toFixed(1)} km</p>` : '';
+                const stockHtml = c.stock.length > 0 ? `<div class="mt-2 pt-2 border-t border-[var(--color-border)] text-xs text-[var(--color-text-secondary)] space-y-1"><p class="font-medium text-[var(--color-text-secondary)]"><i class="fas fa-box-open mr-1.5"></i>สต็อกคงเหลือ:</p>${c.stock.map(s => `<div class="flex justify-between items-center"><span>- ${s.name}</span><span class="font-bold text-[var(--color-text-primary)]">${s.quantity}</span></div>`).join('')}</div>` : '';
+
+                return `<div class="${cardBgClass} p-3 rounded-xl shadow-lg border border-[var(--color-border)]"><div class="flex items-center justify-between"><div class="flex-1 cursor-pointer customer-card-main" data-id="${c.id}"><div class="flex items-center space-x-3">${imageHtml}<div class="flex-1"><p class="text-xs text-[var(--color-text-tertiary)] font-mono">${c.id_txt || ''}</p><h3 class="font-semibold text-[var(--color-text-primary)] text-lg">${c.name}</h3>${lastSaleInfoHtml}${distanceHtml}</div></div></div><div class="flex"><button class="stock-shortcut-btn text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] p-3 transition-colors" data-id="${c.id}"><i class="fas fa-box-open text-xl"></i></button><button class="sale-shortcut-btn text-[var(--color-text-secondary)] hover:text-emerald-400 p-3 transition-colors" data-id="${c.id}"><i class="fas fa-shopping-cart text-xl"></i></button></div></div>${stockHtml}</div>`;
+            }).join('');
+        
+        customerList.querySelectorAll('.customer-card-main').forEach(card => card.addEventListener('click', (e) => showCustomerDetail(parseInt(e.currentTarget.dataset.id))));
+        customerList.querySelectorAll('.sale-shortcut-btn').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); const customer = allCustomers.find(c => c.id === parseInt(e.currentTarget.dataset.id)); if (customer) { currentCustomer = customer; showSalesPage(); } }));
+        customerList.querySelectorAll('.stock-shortcut-btn').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); const customer = allCustomers.find(c => c.id === parseInt(e.currentTarget.dataset.id)); if (customer) { currentCustomer = customer; showCustomerStockPage(); } }));
+        customerList.querySelectorAll('.customer-list-pic').forEach(img => {
+            img.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent card click
+                const fullSrc = e.target.dataset.fullSrc;
+                if(fullSrc && fullSrc !== 'null') {
+                    openImageModal(e.target.src, fullSrc);
+                }
+            });
+        });
+    };
+    
+    const showCustomerDetail = async (customerId) => {
+        showLoading();
+        currentCustomer = allCustomers.find(c => c.id === customerId);
+        if (!currentCustomer) { hideLoading(); showToast('ไม่พบข้อมูลลูกค้า', 'error'); return; }
+        
+        customerNameHeader.textContent = `${currentCustomer.id_txt || ''} - ${currentCustomer.name}`;
+        const [imagesRes, salesRes, stockRes] = await Promise.all([ 
+            db.from('customer_images').select('id, image_url').eq('customer_id', customerId), 
+            db.from('sales_records').select('*, products(name)').eq('customer_id', customerId).order('sale_date', { ascending: false }),
+            db.from('customer_stock').select('*, products(name)').eq('customer_id', customerId)
+        ]);
+
+        const images = imagesRes.data || [];
+        currentCustomer.images = images;
+        const imageGalleryHtml = images.length > 0 ? `<div class="grid grid-cols-2 sm:grid-cols-3 gap-2">${images.map(img => `<img src="${img.image_url}?width=256&height=256" data-full-src="${img.image_url}" class="gallery-image w-full h-24 object-cover rounded-md shadow-sm cursor-pointer">`).join('')}</div>` : '<p class="text-slate-400">ไม่มีรูปภาพ</p>';
+        
+        const transactions = (salesRes.data || []).reduce((acc, sale) => { (acc[sale.transaction_id] = acc[sale.transaction_id] || { items: [], date: sale.sale_date, total: 0 }).items.push(sale); acc[sale.transaction_id].total += sale.total_amount; return acc; }, {});
+        let historyHtml = Object.keys(transactions).length === 0 ? '<p class="text-slate-400">ยังไม่มีประวัติการขาย</p>' : Object.entries(transactions).map(([transactionId, tx]) => {
+            return `<div class="border-b border-slate-700 py-3"><div class="flex justify-between font-semibold text-slate-200"><span>${formatDateTime(tx.date)}</span><div class="flex items-center"><span class="mr-4">รวม: ${tx.total.toLocaleString('th-TH')} บาท</span><button data-tx-id="${transactionId}" class="edit-sale-btn text-amber-400 hover:text-amber-300"><i class="fas fa-edit"></i></button></div></div><ul class="list-disc list-inside text-sm text-slate-300 mt-1">${tx.items.map(item => `<li>${item.products.name} x ${item.quantity}</li>`).join('')}</ul></div>`
+        }).join('');
+
+        const stocks = (stockRes.data || []).sort((a,b) => a.products.name.localeCompare(b.products.name, 'th'));
+        let stockHtml = stocks.length > 0 ? stocks.map(s => `<div class="flex justify-between items-center text-sm py-1"><span class="text-slate-300">${s.products.name}</span><div class="flex items-center gap-2"><span class="font-semibold text-slate-100">${s.quantity} ชิ้น</span><button data-product-id="${s.product_id}" data-product-name="${s.products.name}" data-quantity="${s.quantity}" class="adjust-stock-btn text-xs bg-slate-600 text-slate-200 px-2 py-1 rounded hover:bg-slate-500 transition">ปรับ</button></div></div>`).join('') : '<p class="text-slate-400">ไม่มีข้อมูลสต็อก</p>';
+
+        const addressParts = [];
+        if (currentCustomer.address) addressParts.push(currentCustomer.address);
+        if (currentCustomer.village) addressParts.push(`หมู่ ${currentCustomer.village}`);
+        if (currentCustomer.sub_district) addressParts.push(`ต.${currentCustomer.sub_district}`);
+        if (currentCustomer.district) addressParts.push(`อ.${currentCustomer.district}`);
+        const fullAddress = addressParts.length > 0 ? addressParts.join(' ') : 'N/A';
+
+        customerDetailContent.innerHTML = `<div class="space-y-4">
+        <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700"><h3 class="font-bold text-lg text-slate-100 mb-2">ข้อมูลลูกค้า</h3><p class="text-slate-300"><i class="fas fa-id-card w-5 text-center mr-2 text-slate-500"></i> ${currentCustomer.id_txt || 'N/A'}</p><p class="text-slate-300 flex items-start"><i class="fas fa-map-marker-alt w-5 text-center mr-2 text-slate-500 pt-1"></i> <span>${fullAddress}</span></p><p class="text-slate-300"><i class="fas fa-phone w-5 text-center mr-2 text-slate-500"></i> ${currentCustomer.phone||'N/A'}</p><p class="text-slate-300"><i class="fas fa-location-arrow w-5 text-center mr-2 text-slate-500"></i> ${currentCustomer.lat||'N/A'}, ${currentCustomer.lng||'N/A'}</p><p class="mt-2 text-slate-300 flex items-start"><i class="fas fa-info-circle w-5 text-center mr-2 text-slate-500 pt-1"></i> <span class="whitespace-pre-wrap">${currentCustomer.notes || 'ไม่มีรายละเอียดเพิ่มเติม'}</span></p><button data-lat="${currentCustomer.lat}" data-lng="${currentCustomer.lng}" class="navigate-btn mt-3 w-full bg-teal-500 text-white py-2 rounded-lg font-semibold hover:bg-teal-600 transition shadow-sm shadow-teal-200/20"><i class="fas fa-directions mr-2"></i>นำทาง</button></div>
+        <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700"><h3 class="font-bold text-lg text-slate-100 mb-2">สต็อกสินค้าที่ลูกค้า</h3><div class="space-y-1">${stockHtml}</div></div>
+        <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700"><h3 class="font-bold text-lg text-slate-100 mb-2">รูปภาพ</h3>${imageGalleryHtml}</div>
+        <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700"><h3 class="font-bold text-lg text-slate-100 mb-2">ประวัติการขาย</h3><div class="space-y-2">${historyHtml}</div></div></div>`;
+        customerDetailContent.querySelector('.navigate-btn').addEventListener('click', (e) => { const { lat, lng } = e.currentTarget.dataset; if (lat && lng && lat !== 'null' && lng !== 'null') window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank'); else showToast('ไม่มีข้อมูลพิกัดสำหรับลูกค้ารายนี้', 'error'); });
+        customerDetailContent.querySelectorAll('.edit-sale-btn').forEach(btn => btn.addEventListener('click', (e) => handleEditSale(e.currentTarget.dataset.txId)));
+        customerDetailContent.querySelectorAll('.adjust-stock-btn').forEach(btn => btn.addEventListener('click', (e) => { const { productId, productName, quantity } = e.currentTarget.dataset; openStockModal(productId, productName, quantity); }));
+        customerDetailContent.querySelectorAll('.gallery-image').forEach(img => img.addEventListener('click', (e) => openImageModal(e.target.src, e.target.dataset.fullSrc)));
+        showPage('customerDetail');
+        hideLoading();
+    };
+
+    const showSalesPage = async () => {
+        if (!currentCustomer) return;
+        showLoading();
+        saleCustomerName.textContent = `สำหรับ: ${currentCustomer.name}`;
+        
+        const { data: stockData, error } = await db.from('customer_stock').select('*').eq('customer_id', currentCustomer.id);
+        if (error) { console.error('Error fetching customer stock:', error); showToast('ไม่สามารถดึงข้อมูลสต็อกลูกค้าได้', 'error'); hideLoading(); return; }
+        customerStock = new Map(stockData.map(item => [item.product_id, item.quantity]));
+
+        if (editModeState.isEditing) {
+            salesPageTitle.textContent = 'แก้ไขการขาย';
+            confirmSaleBtn.innerHTML = '<i class="fas fa-save mr-2"></i>บันทึกการแก้ไข';
+            returnsCart = {}; 
+        } else {
+            salesPageTitle.textContent = 'ขายสินค้า & รับคืน';
+            confirmSaleBtn.innerHTML = '<i class="fas fa-check-circle mr-2"></i>ยืนยันรายการ';
+            cart = {};
+            returnsCart = {};
+        }
+        
+        await renderSalesHistoryForSalesPage(currentCustomer.id);
+        renderProductLists();
+        updateSummaryView();
+        hideLoading();
+        showPage('sales');
+    };
+
+    const generateProductListHtml = (productMap) => {
+        if (Object.keys(productMap).length === 0) {
+            return '<p class="text-slate-400 text-sm px-4">ไม่พบรายการขาย</p>';
+        }
+        const list = Object.values(productMap).sort((a, b) => b.total - a.total);
+        return `<div class="space-y-2">${list.map(p => `
+            <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-300">${p.name} (x${p.quantity})</span>
+                <span class="font-medium text-slate-100">${formatCurrency(p.total)}</span>
+            </div>
+        `).join('')}</div>`;
+    };
+
+    const generateTransactionListHtml = (transactions) => {
+        if (Object.keys(transactions).length === 0) {
+            return '<p class="text-slate-400 text-sm px-4">ไม่พบรายการ</p>';
+        }
+        const sortedTx = Object.values(transactions).sort((a, b) => b.date - a.date);
+        return `<div class="space-y-2">${sortedTx.map(tx => `
+            <details class="bg-slate-700/50 rounded-lg border border-slate-700 text-sm">
+                <summary class="p-2 flex justify-between items-center cursor-pointer">
+                    <div>
+                        <p class="font-medium text-slate-200">${tx.customerName}</p>
+                        <p class="text-xs text-slate-400">${formatDateTime(tx.date)}</p>
+                    </div>
+                    <span class="font-bold text-slate-100">${formatCurrency(tx.total)}</span>
+                </summary>
+                <div class="p-2 border-t border-slate-700">
+                    ${tx.items.map(item => `
+                        <div class="flex justify-between items-center text-xs text-slate-300">
+                            <span>${item.name} (x${item.quantity})</span>
+                            <span>${formatCurrency(item.total)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </details>
+        `).join('')}</div>`;
+    };
+
+    const renderSalesSummary = async () => {
+        salesSummaryContent.innerHTML = `<div class="text-center p-8"><i class="fas fa-spinner fa-spin text-3xl text-slate-400"></i><p class="mt-2">กำลังโหลดข้อมูล...</p></div>`;
+        if (!currentSalesperson) { salesSummaryContent.innerHTML = `<p class="text-center text-red-500">กรุณาเลือกพนักงานขายก่อน</p>`; return; }
+
+        const { data, error } = await db.from('sales_records').select('sale_date, total_amount, quantity, product_id, products(name), customers(name), transaction_id').eq('salesperson_id', currentSalesperson.id);
+        if (error) { console.error("Error fetching sales records:", error); salesSummaryContent.innerHTML = `<p class="text-center text-red-500">ไม่สามารถโหลดข้อมูลการขายได้</p>`; return; }
+
+        const now = new Date();
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); weekStart.setHours(0, 0, 0, 0);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const yearStart = new Date(now.getFullYear(), 0, 1);
+
+        let todaySales = 0, weekSales = 0, monthSales = 0, yearSales = 0;
+        const todayProducts = {}, weekProducts = {}, monthProducts = {}, yearProducts = {};
+        const todayTransactions = {};
+
+        for (const record of data) {
+            const saleDate = new Date(record.sale_date);
+            const amount = record.total_amount;
+            const productId = record.product_id;
+            const productName = record.products.name;
+            const quantity = record.quantity;
+
+            const groupProduct = (group) => {
+                if (!group[productId]) { group[productId] = { name: productName, quantity: 0, total: 0 }; }
+                group[productId].quantity += quantity;
+                group[productId].total += amount;
+            };
+
+            if (saleDate >= todayStart) { 
+                todaySales += amount; 
+                groupProduct(todayProducts);
+                const txId = record.transaction_id;
+                if (!todayTransactions[txId]) {
+                    todayTransactions[txId] = { customerName: record.customers.name, date: saleDate, total: 0, items: [] };
+                }
+                todayTransactions[txId].total += amount;
+                todayTransactions[txId].items.push({ name: productName, quantity: quantity, total: amount });
+            }
+            if (saleDate >= weekStart) { weekSales += amount; groupProduct(weekProducts); }
+            if (saleDate >= monthStart) { monthSales += amount; groupProduct(monthProducts); }
+            if (saleDate >= yearStart) { yearSales += amount; groupProduct(yearProducts); }
+        }
+
+        salesSummaryContent.innerHTML = `
+            <details class="bg-slate-800 rounded-xl shadow-lg border border-emerald-500/30 overflow-hidden" open><summary class="p-4 flex justify-between items-center cursor-pointer"><p class="text-lg font-semibold text-slate-200">ยอดขายวันนี้</p><p class="text-2xl font-bold text-emerald-400">${formatCurrency(todaySales)}</p></summary><div class="bg-slate-800/50 p-4 border-t border-slate-700"><h4 class="font-semibold text-slate-200 mb-2 text-sm">สรุปตามสินค้า</h4>${generateProductListHtml(todayProducts)}<h4 class="font-semibold text-slate-200 mt-4 mb-2 text-sm">รายการขายรายวัน</h4>${generateTransactionListHtml(todayTransactions)}</div></details>
+            <details class="bg-slate-800 rounded-xl shadow-lg border border-sky-500/30 overflow-hidden"><summary class="p-4 flex justify-between items-center cursor-pointer"><p class="text-lg font-semibold text-slate-200">ยอดขายสัปดาห์นี้</p><p class="text-2xl font-bold text-sky-400">${formatCurrency(weekSales)}</p></summary><div class="bg-slate-800/50 p-4 border-t border-slate-700">${generateProductListHtml(weekProducts)}</div></details>
+            <details class="bg-slate-800 rounded-xl shadow-lg border border-amber-500/30 overflow-hidden"><summary class="p-4 flex justify-between items-center cursor-pointer"><p class="text-lg font-semibold text-slate-200">ยอดขายเดือนนี้</p><p class="text-2xl font-bold text-amber-400">${formatCurrency(monthSales)}</p></summary><div class="bg-slate-800/50 p-4 border-t border-slate-700">${generateProductListHtml(monthProducts)}</div></details>
+            <details class="bg-slate-800 rounded-xl shadow-lg border border-indigo-500/30 overflow-hidden"><summary class="p-4 flex justify-between items-center cursor-pointer"><p class="text-lg font-semibold text-slate-200">ยอดขายปีนี้</p><p class="text-2xl font-bold text-indigo-400">${formatCurrency(yearSales)}</p></summary><div class="bg-slate-800/50 p-4 border-t border-slate-700">${generateProductListHtml(yearProducts)}</div></details>
+        `;
+    };
+
+    const renderCustomDateRangeSummary = async () => {
+        customRangeSummary.innerHTML = `<div class="text-center p-4"><i class="fas fa-spinner fa-spin text-2xl text-slate-400"></i></div>`;
+        const startDate = document.getElementById('start-date-input').value;
+        const endDate = document.getElementById('end-date-input').value;
+
+        if (!startDate || !endDate) {
+            customRangeSummary.innerHTML = `<p class="text-center text-red-400">กรุณาเลือกช่วงวันที่</p>`;
+            return;
+        }
+        
+        const endDateWithTime = new Date(endDate);
+        endDateWithTime.setHours(23, 59, 59, 999);
+
+        const { data, error } = await db.from('sales_records')
+            .select('sale_date, total_amount, quantity, product_id, products(name), customers(name), transaction_id')
+            .eq('salesperson_id', currentSalesperson.id)
+            .gte('sale_date', new Date(startDate).toISOString())
+            .lte('sale_date', endDateWithTime.toISOString());
+
+        if (error) {
+            console.error("Error fetching custom range sales:", error);
+            customRangeSummary.innerHTML = `<p class="text-center text-red-400">ไม่สามารถโหลดข้อมูลได้</p>`;
+            return;
+        }
+
+        if (data.length === 0) {
+            customRangeSummary.innerHTML = `<p class="text-center text-slate-400 p-4">ไม่พบข้อมูลการขายในช่วงเวลานี้</p>`;
+            return;
+        }
+
+        let totalSales = 0;
+        const productMap = {};
+        const transactions = {};
+
+        for (const record of data) {
+            totalSales += record.total_amount;
+            const productId = record.product_id;
+            if (!productMap[productId]) {
+                productMap[productId] = { name: record.products.name, quantity: 0, total: 0 };
+            }
+            productMap[productId].quantity += record.quantity;
+            productMap[productId].total += record.total_amount;
+
+            const txId = record.transaction_id;
+            if (!transactions[txId]) {
+                transactions[txId] = { customerName: record.customers.name, date: new Date(record.sale_date), total: 0, items: [] };
+            }
+            transactions[txId].total += record.total_amount;
+            transactions[txId].items.push({ name: record.products.name, quantity: record.quantity, total: record.total_amount });
+        }
+
+        customRangeSummary.innerHTML = `
+            <div class="border-t border-slate-700 mt-4 pt-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h4 class="font-bold text-slate-100">ยอดรวม:</h4>
+                    <p class="text-xl font-bold text-amber-400">${formatCurrency(totalSales)}</p>
+                </div>
+                <h4 class="font-semibold text-slate-200 mt-4 mb-2 text-sm">สรุปตามสินค้า</h4>
+                ${generateProductListHtml(productMap)}
+                <h4 class="font-semibold text-slate-200 mt-4 mb-2 text-sm">รายการขาย</h4>
+                ${generateTransactionListHtml(transactions)}
+            </div>
+        `;
+    };
+
+    const renderSalesHistoryForSalesPage = async (customerId) => {
+        const { data, error } = await db.from('sales_records').select('*, products(name)').eq('customer_id', customerId).order('sale_date', { ascending: false }).limit(5);
+        if (error || !data || data.length === 0) { salesHistoryOnSalePage.innerHTML = '<p class="text-slate-400">ไม่มีประวัติการซื้อ</p>'; return; }
+        const transactions = data.reduce((acc, sale) => { (acc[sale.transaction_id] = acc[sale.transaction_id] || { items: [], date: sale.sale_date, total: 0 }).items.push(sale); acc[sale.transaction_id].total += sale.total_amount; return acc; }, {});
+        salesHistoryOnSalePage.innerHTML = Object.values(transactions).map(tx => `<div class="border-b border-slate-700 pb-2"><div class="flex justify-between font-semibold text-slate-300"><span>${formatDateTime(tx.date)}</span><span>${tx.total.toLocaleString('th-TH')} บาท</span></div><ul class="list-disc list-inside text-slate-300 pl-2">${tx.items.map(item => `<li>${item.products.name} x ${item.quantity}</li>`).join('')}</ul></div>`).join('');
+    };
+
+    const handleEditSale = async (transactionId) => {
+        showLoading();
+        const { data, error } = await db.from('sales_records').select('*').eq('transaction_id', transactionId);
+        hideLoading();
+        if (error) { showToast('ไม่สามารถดึงข้อมูลการขายเก่าได้', 'error'); return; }
+        editModeState = { isEditing: true, transactionId: transactionId };
+        cart = data.reduce((acc, item) => { const product = allProducts.find(p => p.id === item.product_id); if (product) { acc[item.product_id] = { name: product.name, price: item.unit_price, quantity: item.quantity }; } return acc; }, {});
+        showSalesPage();
+    };
+
+    const renderProductLists = () => {
+        const productItemTemplate = (p, type) => {
+            const currentStock = customerStock.get(p.id) || 0;
+            const qtyInCart = (type === 'sale' ? cart[p.id]?.quantity : returnsCart[p.id]?.quantity) || 0;
+            return `<div class="flex items-center justify-between p-2 bg-slate-700/50 rounded-lg">
+                <div><p class="font-medium text-slate-200">${p.name}</p><p class="text-sm text-slate-400">${p.price.toLocaleString('th-TH')} บาท</p><p class="text-xs text-sky-400 font-medium">สต็อกลูกค้า: ${currentStock} ชิ้น</p></div>
+                <div class="flex items-center space-x-2"><button class="qty-btn bg-slate-700 rounded-md w-7 h-7 font-bold text-slate-300 hover:bg-slate-600 transition" data-product-id="${p.id}" data-change="-1" data-type="${type}">-</button><span class="w-8 text-center font-semibold text-slate-200">${qtyInCart}</span><button class="qty-btn bg-slate-700 rounded-md w-7 h-7 font-bold text-slate-300 hover:bg-slate-600 transition" data-product-id="${p.id}" data-change="1" data-type="${type}">+</button></div>
+            </div>`;
+        };
+        productListForSale.innerHTML = allProducts.map(p => productItemTemplate(p, 'sale')).join('');
+        productListForReturn.innerHTML = allProducts.map(p => productItemTemplate(p, 'return')).join('');
+        document.querySelectorAll('.qty-btn').forEach(btn => btn.addEventListener('click', () => { 
+            const { productId, change, type } = btn.dataset;
+            if (type === 'sale') { updateCartItemQuantity(productId, parseInt(change)); }
+            else { updateReturnItemQuantity(productId, parseInt(change)); }
+        }));
+    };
+
+    const updateCartItemQuantity = (productId, change) => {
+        const product = allProducts.find(p => p.id == productId); if (!product) return;
+        let currentQuantity = cart[productId]?.quantity || 0;
+        const newQuantity = currentQuantity + change;
+        if (newQuantity > 0) { cart[productId] = { name: product.name, price: product.price, quantity: newQuantity }; } 
+        else { delete cart[productId]; }
+        updateSummaryView(); renderProductLists();
+    };
+    
+    const updateReturnItemQuantity = (productId, change) => {
+        const product = allProducts.find(p => p.id == productId); if (!product) return;
+        const maxReturnQty = customerStock.get(parseInt(productId)) || 0;
+        let currentQuantity = returnsCart[productId]?.quantity || 0;
+        const newQuantity = currentQuantity + change;
+        if (newQuantity > 0 && newQuantity <= maxReturnQty) { returnsCart[productId] = { name: product.name, price: product.price, quantity: newQuantity }; }
+        else if (newQuantity <= 0) { delete returnsCart[productId]; }
+        else { showToast(`คืน '${product.name}' เกินสต็อก (${maxReturnQty} ชิ้น)`, 'error'); }
+        updateSummaryView(); renderProductLists();
+    };
+
+    const updateSummaryView = () => {
+        summaryItems.innerHTML = '';
+        let totalAmount = 0;
+        const hasItems = Object.keys(cart).length > 0 || Object.keys(returnsCart).length > 0;
+        
+        if (!hasItems) { summaryItems.innerHTML = `<p class="text-slate-400">ยังไม่มีรายการ</p>`; confirmSaleBtn.disabled = true; } 
+        else {
+            confirmSaleBtn.disabled = false;
+            if(Object.keys(cart).length > 0) {
+                summaryItems.innerHTML += `<h4 class="font-semibold text-emerald-400 text-sm">รายการขาย</h4>`;
+                for (const productId in cart) {
+                    const item = cart[productId]; const itemTotal = item.price * item.quantity; totalAmount += itemTotal;
+                    summaryItems.innerHTML += `<div class="flex justify-between items-center text-sm"><div><p class="font-medium text-slate-200">${item.name}</p><p class="text-slate-400">${item.price.toLocaleString('th-TH')} x ${item.quantity} = ${itemTotal.toLocaleString('th-TH')} บาท</p></div><button class="delete-summary-item-btn text-red-400 hover:text-red-300 p-2" data-product-id="${productId}" data-type="sale"><i class="fas fa-trash-alt"></i></button></div>`;
+                }
+            }
+            if(Object.keys(returnsCart).length > 0) {
+                summaryItems.innerHTML += `<h4 class="font-semibold text-red-400 text-sm mt-2">รายการรับคืน</h4>`;
+                for (const productId in returnsCart) {
+                    const item = returnsCart[productId];
+                    summaryItems.innerHTML += `<div class="flex justify-between items-center text-sm"><div><p class="font-medium text-slate-200">${item.name}</p><p class="text-slate-400">คืนจำนวน: ${item.quantity} ชิ้น</p></div><button class="delete-summary-item-btn text-red-400 hover:text-red-300 p-2" data-product-id="${productId}" data-type="return"><i class="fas fa-trash-alt"></i></button></div>`;
+                }
+            }
+        }
+        totalAmountEl.textContent = totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 });
+        document.querySelectorAll('.delete-summary-item-btn').forEach(btn => btn.addEventListener('click', () => { 
+            const { productId, type } = btn.dataset;
+            if (type === 'sale') { delete cart[productId]; } else { delete returnsCart[productId]; }
+            updateSummaryView(); renderProductLists(); 
+        }));
+    };
+    
+    const handleSaleSubmit = async () => {
+        const hasSales = Object.keys(cart).length > 0;
+        const hasReturns = Object.keys(returnsCart).length > 0;
+        if (!hasSales && !hasReturns && !editModeState.isEditing) return;
+        
+        showLoading();
+
+        const transactionId = editModeState.isEditing ? editModeState.transactionId : crypto.randomUUID();
+        
+        if (editModeState.isEditing) {
+            const { data: oldRecords } = await db.from('sales_records').select('product_id, quantity').eq('transaction_id', transactionId);
+            for (const record of (oldRecords || [])) {
+                await db.rpc('adjust_customer_stock', { c_id: currentCustomer.id, p_id: record.product_id, qty_change: -record.quantity });
+            }
+            await db.from('sales_records').delete().eq('transaction_id', transactionId);
+        }
+        
+        const netStockChanges = new Map();
+        for (const productId in cart) { netStockChanges.set(parseInt(productId), (netStockChanges.get(parseInt(productId)) || 0) + cart[productId].quantity); }
+        for (const productId in returnsCart) { netStockChanges.set(parseInt(productId), (netStockChanges.get(parseInt(productId)) || 0) - returnsCart[productId].quantity); }
+        for (const [productId, qtyChange] of netStockChanges.entries()) {
+            if (qtyChange !== 0) { await db.rpc('adjust_customer_stock', { c_id: currentCustomer.id, p_id: productId, qty_change: qtyChange }); }
+        }
+
+        if (hasSales) {
+            const recordsToInsert = Object.entries(cart).map(([productId, item]) => ({
+                transaction_id: transactionId, customer_id: currentCustomer.id, salesperson_id: currentSalesperson.id, product_id: productId,
+                quantity: item.quantity, unit_price: item.price, total_amount: item.quantity * item.quantity
+            }));
+            const { error } = await db.from('sales_records').insert(recordsToInsert);
+            if (error) { console.error('Error saving sale:', error); showToast('เกิดข้อผิดพลาดในการบันทึกการขาย', 'error'); hideLoading(); return; }
+        }
+
+        showToast(editModeState.isEditing ? 'แก้ไขรายการสำเร็จ!' : 'บันทึกรายการสำเร็จ!', 'success');
+        editModeState = { isEditing: false, transactionId: null };
+        hideLoading();
+        await fetchCustomers(currentSalesperson.id);
+        showMainView('customer-list-page');
+        showPage('main', 'backward');
+    };
+
+    const initOverviewMap = () => {
+        if (!overviewMap) {
+            const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' });
+            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
+            
+            overviewMap = L.map('overview-map', { layers: [satelliteLayer] }).setView([13.7563, 100.5018], 6);
+            
+            const baseMaps = { "มุมมองดาวเทียม": satelliteLayer, "มุมมองถนน": streetLayer };
+            L.control.layers(baseMaps).addTo(overviewMap);
+
+            overviewMap.on('popupopen', (e) => {
+                const content = e.popup.getContent();
+                const wrapper = e.popup._contentNode.querySelector('.popup-content-wrapper');
+                if (wrapper) {
+                    wrapper.addEventListener('click', (ev) => {
+                        if (!ev.target.closest('.navigate-btn-map')) {
+                            const customerId = parseInt(wrapper.dataset.customerId);
+                            if (customerId) {
+                                showCustomerDetail(customerId);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        
+        overviewMap.eachLayer((layer) => { if (layer instanceof L.Marker) { overviewMap.removeLayer(layer); } });
+
+        const validCustomers = allCustomers.filter(c => c.lat && c.lng);
+        if (validCustomers.length > 0) {
+            const markers = L.featureGroup();
+            validCustomers.forEach(c => {
+                const thumbnailUrl = c.image_url ? `${c.image_url}?width=256&height=256` : null;
+                const placeholderIcon = `<div class="w-full h-24 bg-blue-100 rounded-t-lg flex items-center justify-center"><i class="fas fa-user text-4xl text-blue-500"></i></div>`;
+                const imageHtml = thumbnailUrl ? `<img src="${thumbnailUrl}" class="w-full h-24 object-cover rounded-t-lg">` : placeholderIcon;
+
+                const popupContent = `
+                    <div class="popup-content-wrapper w-44 text-center cursor-pointer" data-customer-id="${c.id}">
+                        ${imageHtml}
+                        <div class="p-2">
+                            <h3 class="font-bold text-base mb-2">${c.name}</h3>
+                            <a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" class="navigate-btn-map block w-full text-center bg-blue-600 text-white text-sm py-1.5 rounded-lg hover:bg-blue-700 transition" style="color: white !important;">
+                                <i class="fas fa-directions mr-1"></i>นำทาง
+                            </a>
+                        </div>
+                    </div>
+                `;
+                const marker = L.marker([c.lat, c.lng]).bindPopup(popupContent);
+                markers.addLayer(marker);
+            });
+            markers.addTo(overviewMap);
+            overviewMap.fitBounds(markers.getBounds().pad(0.1));
+        }
+        setTimeout(() => overviewMap.invalidateSize(), 100);
+    };
+
+    const initOrUpdateMiniMap = (lat, lng) => {
+        miniMapDiv.style.display = 'block';
+        if (!miniMap) {
+            miniMap = L.map('mini-map', { zoomControl: false, dragging: false, doubleClickZoom: false, scrollWheelZoom: false }).setView([lat, lng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMap);
+            miniMarker = L.marker([lat, lng]).addTo(miniMap);
+        } else { miniMap.setView([lat, lng], 15); miniMarker.setLatLng([lat, lng]); }
+        setTimeout(() => miniMap.invalidateSize(), 100);
+    };
+    
+    const getCurrentLocationForModal = () => {
+        locationStatus.classList.add('hidden');
+        if (!navigator.geolocation) {
+            locationStatus.innerHTML = 'เบราว์เซอร์ของคุณไม่รองรับการระบุตำแหน่ง';
+            locationStatus.classList.remove('hidden');
+            const defaultLat = 13.7563; const defaultLng = 100.5018;
+            document.getElementById('customer-lat').value = defaultLat;
+            document.getElementById('customer-lng').value = defaultLng;
+            initOrUpdateMiniMap(defaultLat, defaultLng);
+            return;
+        }
+        showLoading();
+        locationStatus.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>กำลังดึงตำแหน่งปัจจุบัน...';
+        locationStatus.classList.remove('hidden');
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                document.getElementById('customer-lat').value = latitude;
+                document.getElementById('customer-lng').value = longitude;
+                initOrUpdateMiniMap(latitude, longitude);
+                locationStatus.classList.add('hidden'); 
+                hideLoading();
+                showToast('ดึงตำแหน่งปัจจุบันสำเร็จ', 'success');
+            },
+            (error) => {
+                console.error('Geolocation error:', error);
+                locationStatus.classList.add('hidden');
+                showToast(`ไม่สามารถดึงตำแหน่งปัจจุบันได้`, 'error');
+                const defaultLat = 13.7563; const defaultLng = 100.5018;
+                document.getElementById('customer-lat').value = defaultLat;
+                document.getElementById('customer-lng').value = defaultLng;
+                initOrUpdateMiniMap(defaultLat, defaultLng); 
+                hideLoading();
+            }
+        );
+    };
+
+    const getCurrentLocationForSort = () => {
+        showLoading();
+        if (!navigator.geolocation) {
+            showToast('เบราว์เซอร์ไม่รองรับ Location', 'error');
+            currentUserLocation = { lat: 13.7563, lng: 100.5018 };
+            applySort();
+            hideLoading();
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                currentUserLocation = position && position.coords ? { lat: position.coords.latitude, lng: position.coords.longitude } : { lat: 13.7563, lng: 100.5018 };
+                showToast('ดึงตำแหน่งปัจจุบันสำเร็จ', 'success');
+                applySort();
+                hideLoading();
+            },
+            (error) => {
+                console.error("Geolocation error:", error);
+                showToast('ไม่สามารถดึงตำแหน่งได้', 'error');
+                currentUserLocation = { lat: 13.7563, lng: 100.5018 };
+                applySort();
+                hideLoading();
+            }
+        );
+    };
+
+    const openMapModal = () => {
+        mapModal.classList.remove('hidden');
+        const lat = parseFloat(document.getElementById('customer-lat').value) || 13.7563;
+        const lng = parseFloat(document.getElementById('customer-lng').value) || 100.5018;
+        if (!map) {
+            const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' });
+            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
+            const baseMaps = { "มุมมองถนน": streetLayer, "มุมมองดาวเทียม": satelliteLayer };
+            map = L.map('map', { layers: [streetLayer] }).setView([lat, lng], 13);
+            L.control.layers(baseMaps).addTo(map);
+            marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+        } else { map.setView([lat, lng], 13); marker.setLatLng([lat, lng]); }
+        setTimeout(() => map.invalidateSize(), 100);
+    };
+    
+    const closeMapModal = () => mapModal.classList.add('hidden');
+    const confirmMapSelection = () => {
+        const { lat, lng } = marker.getLatLng();
+        document.getElementById('customer-lat').value = lat;
+        document.getElementById('customer-lng').value = lng;
+        initOrUpdateMiniMap(lat, lng); closeMapModal();
+    };
+
+    const renderImagePreviews = () => {
+        imagePreviewContainer.innerHTML = '';
+        selectedImageFiles.forEach((file, index) => {
+            const previewWrapper = document.createElement('div'); previewWrapper.className = 'relative';
+            const img = document.createElement('img'); img.className = 'w-full h-24 object-cover rounded-md shadow-sm';
+            const reader = new FileReader(); reader.onload = (e) => { img.src = e.target.result; }; reader.readAsDataURL(file);
+            const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.className = 'absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs';
+            removeBtn.innerHTML = '×'; removeBtn.onclick = () => { selectedImageFiles.splice(index, 1); renderImagePreviews(); };
+            previewWrapper.appendChild(img); previewWrapper.appendChild(removeBtn); imagePreviewContainer.appendChild(previewWrapper);
+        });
+    };
+    
+    const handleParseCoords = () => {
+        const coordsString = coordsInput.value.trim();
+        if (!coordsString) return;
+        const numbers = coordsString.match(/-?\d+\.?\d+/g);
+        
+        if (numbers && numbers.length >= 2) {
+            const lat = parseFloat(numbers[0]);
+            const lng = parseFloat(numbers[1]);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                document.getElementById('customer-lat').value = lat;
+                document.getElementById('customer-lng').value = lng;
+                initOrUpdateMiniMap(lat, lng);
+                coordsInput.value = '';
+                showToast('ดึงพิกัดสำเร็จ!', 'success');
+            } else {
+                showToast('รูปแบบพิกัดไม่ถูกต้อง', 'error');
+            }
+        } else {
+            showToast('ไม่พบพิกัดที่ถูกต้อง', 'error');
+        }
+    };
+
+    const openCustomerModal = (customer = null) => {
+        customerForm.reset(); imagePreviewContainer.innerHTML = ''; existingImagesContainer.innerHTML = '';
+        selectedImageFiles = []; imagesToDelete = []; miniMapDiv.style.display = 'none'; locationStatus.classList.add('hidden');
+        
+        const villageSelect = document.getElementById('customer-village');
+        villageSelect.innerHTML = '<option value="">-- เลือกหมู่บ้าน --</option>';
+        for (let i = 1; i <= 40; i++) {
+            const option = document.createElement('option');
+            option.value = i;
+            option.textContent = `หมู่ ${i}`;
+            villageSelect.appendChild(option);
+        }
+
+        if (customer) {
+            document.getElementById('modal-title').textContent = 'แก้ไขข้อมูลลูกค้า';
+            document.getElementById('customer-id').value = customer.id; 
+            document.getElementById('customer-name').value = customer.name;
+            document.getElementById('customer-address').value = customer.address; 
+            document.getElementById('customer-district').value = customer.district;
+            document.getElementById('customer-sub-district').value = customer.sub_district; 
+            document.getElementById('customer-village').value = customer.village;
+            document.getElementById('customer-phone').value = customer.phone;
+            document.getElementById('customer-notes').value = customer.notes; 
+            document.getElementById('customer-lat').value = customer.lat;
+            document.getElementById('customer-lng').value = customer.lng;
+            if (customer.lat && customer.lng) { initOrUpdateMiniMap(customer.lat, customer.lng); }
+            (customer.images || []).forEach(img => {
+                const imgWrapper = document.createElement('div'); imgWrapper.className = 'relative';
+                imgWrapper.innerHTML = `<img src="${img.image_url}" class="w-full h-24 object-cover rounded-md shadow-sm"><button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>`;
+                imgWrapper.querySelector('button').onclick = () => { imagesToDelete.push(img); imgWrapper.remove(); };
+                existingImagesContainer.appendChild(imgWrapper);
+            });
+        } else {
+            document.getElementById('modal-title').textContent = 'เพิ่มลูกค้าใหม่';
+            document.getElementById('customer-id').value = '';
+            getCurrentLocationForModal();
+        }
+        customerModal.classList.remove('hidden');
+    };
+    const closeCustomerModal = () => { customerModal.classList.add('hidden'); customerForm.reset(); selectedImageFiles = []; imagesToDelete = []; };
+    
+    const handleCustomerFormSubmit = async (e) => {
+        e.preventDefault(); showLoading();
+        const customerData = { 
+            name: document.getElementById('customer-name').value, 
+            address: document.getElementById('customer-address').value, 
+            district: document.getElementById('customer-district').value, 
+            sub_district: document.getElementById('customer-sub-district').value, 
+            village: document.getElementById('customer-village').value,
+            phone: document.getElementById('customer-phone').value, 
+            notes: document.getElementById('customer-notes').value, 
+            lat: parseFloat(document.getElementById('customer-lat').value) || null, 
+            lng: parseFloat(document.getElementById('customer-lng').value) || null, 
+            salesperson_id: currentSalesperson.id 
+        };
+        const customerId = document.getElementById('customer-id').value;
+        
+        if (imagesToDelete.length > 0) {
+            const imageIdsToDelete = imagesToDelete.map(img => img.id);
+            const imagePathsToDelete = imagesToDelete.map(img => { const urlParts = img.image_url.split('/'); return urlParts.slice(urlParts.indexOf(IMAGE_BUCKET) + 1).join('/'); });
+            await db.from('customer_images').delete().in('id', imageIdsToDelete);
+            await db.storage.from(IMAGE_BUCKET).remove(imagePathsToDelete);
+        }
+
+        const { data, error } = customerId ? await db.from('customers').update(customerData).eq('id', customerId).select().single() : await db.from('customers').insert(customerData).select().single();
+        if (error) { showToast('บันทึกข้อมูลลูกค้าไม่สำเร็จ', 'error'); console.error(error); hideLoading(); return; }
+        
+        if (selectedImageFiles.length > 0) {
+            const newCustomerId = data.id;
+            const resizePromises = selectedImageFiles.map(file => resizeImage(file));
+            const resizedFiles = await Promise.all(resizePromises);
+            const uploadPromises = resizedFiles.map(file => { const filePath = `${newCustomerId}/${Date.now()}_${file.name.split('.')[0]}.jpg`; return db.storage.from(IMAGE_BUCKET).upload(filePath, file); });
+            const uploadResults = await Promise.all(uploadPromises);
+            const imageUrls = []; let uploadError = null;
+            for (const result of uploadResults) { 
+                if (result.error) { console.error('Image upload error:', result.error); uploadError = result.error; break; } 
+                else { const { data: { publicUrl } } = db.storage.from(IMAGE_BUCKET).getPublicUrl(result.data.path); imageUrls.push({ customer_id: newCustomerId, image_url: publicUrl }); }
+            }
+            if (uploadError) {
+                let alertMessage = 'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ';
+                if (uploadError.message === 'Bucket not found') { alertMessage = 'เกิดข้อผิดพลาด: ไม่พบ Storage Bucket "customer.images"!'; }
+                else if (uploadError.message.includes('violates row-level security policy')) { alertMessage = 'เกิดข้อผิดพลาด: ไม่มีสิทธิ์อัปโหลดไฟล์!'; }
+                showToast(alertMessage, 'error', 5000); hideLoading(); return;
+            }
+            if (imageUrls.length > 0) { const { error: imageDbError } = await db.from('customer_images').insert(imageUrls); if (imageDbError) console.error('Error saving image URLs:', imageDbError); }
+        }
+        showToast('บันทึกข้อมูลลูกค้าสำเร็จ!', 'success');
+        closeCustomerModal(); 
+        // No need to call fetchCustomers here, the real-time subscription will handle it.
+        if (customerId) { await showCustomerDetail(parseInt(customerId)); }
+        hideLoading();
+    };
+
+    const showCustomerStockPage = async () => {
+        if (!currentCustomer) return;
+        showLoading();
+        stockCustomerName.textContent = currentCustomer.name;
+        
+        const { data: stockData, error } = await db.from('customer_stock').select('*, products(name)').eq('customer_id', currentCustomer.id);
+        if (error) { showToast("Error fetching stock", 'error'); hideLoading(); return; }
+        
+        const existingStock = new Map(stockData.map(item => [item.product_id, item.quantity]));
+
+        stockListContainer.innerHTML = allProducts.map(p => {
+            const currentQty = existingStock.get(p.id) || 0;
+            return `
+            <div class="flex items-center justify-between p-3 bg-slate-800 rounded-xl shadow-lg border border-slate-700">
+                <label for="stock-prod-${p.id}" class="font-medium text-slate-200">${p.name}</label>
+                <input type="number" id="stock-prod-${p.id}" data-product-id="${p.id}" value="${currentQty}" min="0" class="w-24 text-center rounded-md p-2 transition">
+            </div>
+            `;
+        }).join('');
+
+        hideLoading();
+        showPage('customerStock');
+    };
+
+    const handleSaveStockChanges = async () => {
+        showLoading();
+        const stockInputs = stockListContainer.querySelectorAll('input[type="number"]');
+        const upsertData = Array.from(stockInputs).map(input => ({
+            customer_id: currentCustomer.id,
+            product_id: parseInt(input.dataset.productId),
+            quantity: parseInt(input.value) || 0,
+            last_updated: new Date().toISOString()
+        }));
+
+        const { error } = await db.from('customer_stock').upsert(upsertData, { onConflict: 'customer_id, product_id' });
+        hideLoading();
+        if (error) {
+            console.error("Error saving stock:", error);
+            showToast("บันทึกสต็อกไม่สำเร็จ", 'error');
+        } else {
+            showToast("บันทึกสต็อกสำเร็จ!", 'success');
+            showPage('main', 'backward');
+            showMainView('customer-list-page');
+        }
+    };
+
+    const openStockModal = (productId, productName, currentQuantity) => {
+        stockForm.reset();
+        document.getElementById('stock-modal-title').textContent = `ปรับสต็อก: ${productName}`;
+        document.getElementById('stock-product-id').value = productId;
+        document.getElementById('stock-quantity-input').value = currentQuantity;
+        stockModal.classList.remove('hidden');
+    };
+    const closeStockModal = () => stockModal.classList.add('hidden');
+    const handleStockFormSubmit = async (e) => {
+        e.preventDefault(); showLoading();
+        const productId = document.getElementById('stock-product-id').value;
+        const quantity = parseInt(document.getElementById('stock-quantity-input').value);
+        const { error } = await db.from('customer_stock').upsert({
+            customer_id: currentCustomer.id, product_id: productId, quantity: quantity, last_updated: new Date().toISOString()
+        }, { onConflict: 'customer_id, product_id' });
+        if (error) { 
+            console.error('Error updating stock', error); 
+            showToast('อัปเดตสต็อกไม่สำเร็จ', 'error'); 
+        } else {
+            showToast('ปรับสต็อกสำเร็จ!', 'success');
+        }
+        closeStockModal(); await showCustomerDetail(currentCustomer.id); hideLoading();
+    };
+
+    const openImageModal = (thumbnailSrc, fullSrc) => {
+        if (!fullSrc) { fullSrc = thumbnailSrc; }
+
+        modalImage.src = thumbnailSrc;
+        imageModal.classList.remove('hidden');
+
+        const img = new Image();
+        img.src = fullSrc;
+        img.onload = () => {
+            modalImage.src = fullSrc;
+        };
+        img.onerror = () => {
+            closeImageModal();
+            showToast('ไม่สามารถโหลดรูปภาพได้', 'error');
+        };
+    };
+    const closeImageModal = () => {
+        imageModal.classList.add('hidden');
+        modalImage.src = '';
+    };
+
+    // --- SALESPERSON PROFILE LOGIC ---
+    const showSalespersonProfile = async (salesperson) => {
+        showLoading();
+        currentSalesperson = salesperson; 
+        const { data, error } = await db.from('salespeople').select('*').eq('id', salesperson.id).single();
+        hideLoading();
+        if (error) {
+            showToast('ไม่สามารถโหลดข้อมูลโปรไฟล์ได้', 'error');
+            console.error(error);
+            return;
+        }
+        renderSalespersonProfile(data);
+        showPage('salespersonProfile');
+    };
+
+    const renderSalespersonProfile = (sp) => {
+        salespersonProfileContent.innerHTML = `
+            <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
+                <form id="profile-form">
+                    <div class="flex flex-col items-center mb-6">
+                        <div id="profile-pic-container" class="relative rounded-full overflow-hidden group">
+                            <img id="profile-pic-preview" src="${sp.profile_pic_url || 'https://placehold.co/120x120/1e293b/facc15?text=Upload'}" class="w-full h-full object-cover">
+                            <label for="profile-pic-input" class="overlay absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center text-white cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-camera text-2xl"></i>
+                            </label>
+                            <input type="file" id="profile-pic-input" class="hidden" accept="image/*">
+                        </div>
+                        <h2 class="text-2xl font-bold text-slate-100 mt-4">${sp.name}</h2>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="profile-name" class="block text-sm font-medium text-slate-400">ชื่อ-สกุล</label>
+                            <input type="text" id="profile-name" value="${sp.name}" class="mt-1 block w-full rounded-md p-2 transition" required>
+                        </div>
+                        <div>
+                            <label for="vehicle-brand" class="block text-sm font-medium text-slate-400">ยี่ห้อรถ</label>
+                            <input type="text" id="vehicle-brand" value="${sp.vehicle_brand || ''}" class="mt-1 block w-full rounded-md p-2 transition">
+                        </div>
+                        <div>
+                            <label for="vehicle-model" class="block text-sm font-medium text-slate-400">รุ่นรถ</label>
+                            <input type="text" id="vehicle-model" value="${sp.vehicle_model || ''}" class="mt-1 block w-full rounded-md p-2 transition">
+                        </div>
+                        <div>
+                            <label for="license-plate" class="block text-sm font-medium text-slate-400">ทะเบียนรถ</label>
+                            <input type="text" id="license-plate" value="${sp.license_plate || ''}" class="mt-1 block w-full rounded-md p-2 transition">
+                        </div>
+                        <button type="button" id="maintenance-history-btn" class="w-full bg-sky-600 text-white py-3 rounded-lg font-semibold hover:bg-sky-500 transition mt-2">
+                           <i class="fas fa-tools mr-2"></i>ประวัติการซ่อมบำรุง
+                        </button>
+                        <button type="submit" class="w-full bg-amber-500 text-slate-900 py-3 rounded-lg font-semibold hover:bg-amber-400 transition mt-2">
+                            <i class="fas fa-save mr-2"></i>บันทึกข้อมูล
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        document.getElementById('profile-pic-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    document.getElementById('profile-pic-preview').src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('profile-form').addEventListener('submit', handleProfileFormSubmit);
+        document.getElementById('maintenance-history-btn').addEventListener('click', showVehicleMaintenancePage);
+    };
+
+    const handleProfileFormSubmit = async (e) => {
+        e.preventDefault();
+        showLoading();
+
+        let profilePicUrl = currentSalesperson.profile_pic_url;
+        const profilePicFile = document.getElementById('profile-pic-input').files[0];
+
+        if (profilePicFile) {
+            const resizedFile = await resizeImage(profilePicFile, 512, 512);
+            const filePath = `${currentSalesperson.id}/${Date.now()}_${resizedFile.name.split('.')[0]}.jpg`;
+            const { error: uploadError } = await db.storage.from(PROFILE_PIC_BUCKET).upload(filePath, resizedFile, {
+                cacheControl: '3600',
+                upsert: true
+            });
+
+            if (uploadError) {
+                hideLoading();
+                console.error('Supabase storage upload error:', uploadError);
+                let errorMessage = 'อัปโหลดรูปโปรไฟล์ไม่สำเร็จ';
+                if (uploadError.message.includes('security policy')) {
+                    errorMessage = 'อัปโหลดไม่สำเร็จ: ไม่มีสิทธิ์เพิ่มไฟล์';
+                    console.error('Hint: Check Policies on the "profile.pictures" bucket in Supabase. It needs an INSERT policy.');
+                } else if (uploadError.message.includes('Bucket not found')) {
+                    errorMessage = 'อัปโหลดไม่สำเร็จ: ไม่พบ Storage Bucket';
+                    console.error('Hint: Ensure a bucket named "profile.pictures" exists in Supabase Storage.');
+                }
+                showToast(errorMessage, 'error', 5000);
+                return;
+            }
+            const { data: urlData } = db.storage.from(PROFILE_PIC_BUCKET).getPublicUrl(filePath);
+            profilePicUrl = urlData.publicUrl;
+        }
+        
+        const updatedData = {
+            name: document.getElementById('profile-name').value,
+            vehicle_brand: document.getElementById('vehicle-brand').value,
+            vehicle_model: document.getElementById('vehicle-model').value,
+            license_plate: document.getElementById('license-plate').value,
+            profile_pic_url: profilePicUrl
+        };
+
+        const { error: updateError } = await db.from('salespeople').update(updatedData).eq('id', currentSalesperson.id);
+        hideLoading();
+
+        if (updateError) {
+            console.error('Supabase update error:', updateError);
+            let errorMessage = 'บันทึกข้อมูลไม่สำเร็จ';
+            if (updateError.message.includes('security policy')) {
+                errorMessage = 'บันทึกไม่สำเร็จ: ไม่มีสิทธิ์แก้ไขข้อมูล';
+                console.error('Hint: Check Row Level Security (RLS) policies on the "salespeople" table in Supabase. It needs an UPDATE policy.');
+            } else if (updateError.message.includes("Could not find the") && updateError.message.includes("column")) {
+                errorMessage = 'บันทึกไม่สำเร็จ: ไม่พบคอลัมน์ในฐานข้อมูล';
+                console.error(`Hint: The error message "${updateError.message}" suggests a column is missing. Please ensure your 'salespeople' table in Supabase has columns for vehicle_brand, vehicle_model, and license_plate (all of type 'text').`);
+                showToast(errorMessage, 'error', 8000); // Show for longer
+                return;
+            }
+            showToast(errorMessage, 'error', 5000);
+        } else {
+            showToast('บันทึกข้อมูลโปรไฟล์สำเร็จ', 'success');
+            await fetchSalespeople();
+        }
+    };
+    
+    // --- VEHICLE MAINTENANCE LOGIC ---
+    const showVehicleMaintenancePage = async () => {
+        showLoading();
+        const { data: maintenanceRecords, error: maintenanceError } = await db.from('vehicle_maintenance')
+            .select('*')
+            .eq('salesperson_id', currentSalesperson.id)
+            .order('created_at', { ascending: false });
+        
+        if (maintenanceError) {
+            hideLoading();
+            console.error("Maintenance fetch error:", maintenanceError);
+            if (maintenanceError.code === '42P01') { 
+                maintenanceHistoryContent.innerHTML = `
+                    <div class="text-center text-red-400 bg-red-900/30 p-4 rounded-xl border border-red-500/30">
+                        <p class="font-bold text-lg">ข้อผิดพลาด: ไม่พบตารางข้อมูล</p>
+                        <p class="mt-2 text-sm">ดูเหมือนว่าตาราง <code>vehicle_maintenance</code> ยังไม่ได้ถูกสร้างในฐานข้อมูลของคุณ</p>
+                        <p class="mt-2 text-sm">กรุณาสร้างตารางใน Supabase SQL Editor โดยใช้คำสั่งข้างล่างนี้:</p>
+                        <pre class="mt-2 text-left bg-slate-900 text-slate-300 p-3 rounded-md text-xs overflow-x-auto"><code>CREATE TABLE public.vehicle_maintenance (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  salesperson_id BIGINT,
+  item_name TEXT NOT NULL,
+  cost NUMERIC,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_modified TIMESTAMPTZ,
+  CONSTRAINT vehicle_maintenance_salesperson_id_fkey FOREIGN KEY (salesperson_id) REFERENCES public.salespeople(id)
+);</code></pre>
+                    </div>
+                `;
+            } else {
+                 maintenanceHistoryContent.innerHTML = `<div class="text-center text-red-400 p-8">เกิดข้อผิดพลาดในการโหลดข้อมูล</div>`;
+                 showToast('ไม่สามารถโหลดประวัติการซ่อมบำรุงได้', 'error');
+            }
+            showPage('vehicleMaintenance');
+            return;
+        }
+
+        if (maintenanceRecords.length > 0) {
+            const maintenanceIds = maintenanceRecords.map(r => r.id);
+            const { data: images, error: imagesError } = await db.from('maintenance_images')
+                .select('*')
+                .in('maintenance_id', maintenanceIds);
+
+            if (imagesError) {
+                 hideLoading();
+                 console.error("Maintenance images fetch error:", imagesError);
+                 if (imagesError.code === '42P01') {
+                    maintenanceHistoryContent.innerHTML = `
+                        <div class="text-center text-red-400 bg-red-900/30 p-4 rounded-xl border border-red-500/30">
+                            <p class="font-bold text-lg">ข้อผิดพลาด: ไม่พบตารางรูปภาพ</p>
+                            <p class="mt-2 text-sm">ดูเหมือนว่าตาราง <code>maintenance_images</code> สำหรับเก็บรูปภาพการซ่อมบำรุงยังไม่ได้ถูกสร้าง</p>
+                            <p class="mt-2 text-sm">กรุณาสร้างตารางใน Supabase SQL Editor โดยใช้คำสั่งข้างล่างนี้:</p>
+                            <pre class="mt-2 text-left bg-slate-900 text-slate-300 p-3 rounded-md text-xs overflow-x-auto"><code>CREATE TABLE public.maintenance_images (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  maintenance_id BIGINT REFERENCES public.vehicle_maintenance(id) ON DELETE CASCADE,
+  image_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);</code></pre>
+                             <p class="mt-2 text-sm">และอย่าลืมสร้าง Storage Bucket ชื่อ <code>maintenance_images</code> ด้วยนะครับ</p>
+                        </div>
+                    `;
+                    showPage('vehicleMaintenance');
+                    return;
+                 } else {
+                    showToast('เกิดข้อผิดพลาดในการโหลดรูปภาพการซ่อมบำรุง', 'error');
+                 }
+            }
+            
+            const imagesMap = new Map();
+            if (images) {
+                images.forEach(img => {
+                    if (!imagesMap.has(img.maintenance_id)) {
+                        imagesMap.set(img.maintenance_id, []);
+                    }
+                    imagesMap.get(img.maintenance_id).push(img);
+                });
+            }
+            maintenanceRecords.forEach(record => {
+                record.maintenance_images = imagesMap.get(record.id) || [];
+            });
+        }
+        
+        hideLoading();
+        renderMaintenanceHistory(maintenanceRecords);
+        showPage('vehicleMaintenance');
+    };
+
+    const renderMaintenanceHistory = (records) => {
+        if (records.length === 0) {
+            maintenanceHistoryContent.innerHTML = `<div class="text-center text-slate-400 p-8">ไม่มีประวัติการซ่อมบำรุง</div>`;
+            return;
+        }
+        maintenanceHistoryContent.innerHTML = records.map(record => {
+            const images = record.maintenance_images || [];
+            const imageGalleryHtml = images.length > 0 ? `<div class="mt-2 grid grid-cols-3 gap-2">${images.map(img => `<img src="${img.image_url}?width=256&height=256" data-full-src="${img.image_url}" class="gallery-image w-full h-24 object-cover rounded-md shadow-sm cursor-pointer">`).join('')}</div>` : '';
+
+            return `
+            <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="font-bold text-slate-100">${record.item_name}</p>
+                        <p class="text-sm text-slate-400">${formatDate(record.created_at)}</p>
+                    </div>
+                    <div class="text-right">
+                         <p class="font-semibold text-lg text-red-400">${record.cost ? formatCurrency(record.cost) : ''}</p>
+                         <button class="edit-maintenance-btn text-amber-400 hover:text-amber-300 text-sm" data-id="${record.id}"><i class="fas fa-edit mr-1"></i>แก้ไข</button>
+                    </div>
+                </div>
+                <p class="mt-2 text-slate-300 whitespace-pre-wrap">${record.note || ''}</p>
+                ${imageGalleryHtml}
+            </div>
+        `}).join('');
+
+        maintenanceHistoryContent.querySelectorAll('.edit-maintenance-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const recordId = parseInt(btn.dataset.id);
+                const record = records.find(r => r.id === recordId);
+                openMaintenanceModal(record);
+            });
+        });
+
+        maintenanceHistoryContent.querySelectorAll('.gallery-image').forEach(img => img.addEventListener('click', (e) => openImageModal(e.target.src, e.target.dataset.fullSrc)));
+    };
+
+    const openMaintenanceModal = async (record = null) => {
+        maintenanceForm.reset();
+        maintenanceImagePreviewContainer.innerHTML = '';
+        existingMaintenanceImagesContainer.innerHTML = '';
+        selectedMaintenanceImageFiles = [];
+        maintenanceImagesToDelete = [];
+
+        if (record) {
+            document.getElementById('maintenance-modal-title').textContent = 'แก้ไขรายการซ่อมบำรุง';
+            document.getElementById('maintenance-id').value = record.id;
+            document.getElementById('maintenance-item-name').value = record.item_name;
+            document.getElementById('maintenance-note').value = record.note;
+            document.getElementById('maintenance-cost').value = record.cost;
+            
+            // Render existing images
+            (record.maintenance_images || []).forEach(img => {
+                const imgWrapper = document.createElement('div'); imgWrapper.className = 'relative';
+                imgWrapper.innerHTML = `<img src="${img.image_url}" class="w-full h-24 object-cover rounded-md shadow-sm"><button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>`;
+                imgWrapper.querySelector('button').onclick = () => { maintenanceImagesToDelete.push(img); imgWrapper.remove(); };
+                existingMaintenanceImagesContainer.appendChild(imgWrapper);
+            });
+
+        } else {
+            document.getElementById('maintenance-modal-title').textContent = 'เพิ่มรายการซ่อมบำรุง';
+            document.getElementById('maintenance-id').value = '';
+        }
+        maintenanceModal.classList.remove('hidden');
+    };
+
+    const closeMaintenanceModal = () => {
+        maintenanceModal.classList.add('hidden');
+    };
+
+    const handleMaintenanceFormSubmit = async (e) => {
+        e.preventDefault();
+        showLoading();
+
+        const maintenanceData = {
+            salesperson_id: currentSalesperson.id,
+            item_name: document.getElementById('maintenance-item-name').value,
+            note: document.getElementById('maintenance-note').value,
+            cost: parseFloat(document.getElementById('maintenance-cost').value) || null,
+        };
+
+        const maintenanceId = document.getElementById('maintenance-id').value;
+        let recordId = maintenanceId;
+        
+        if (maintenanceId) {
+            maintenanceData.last_modified = new Date().toISOString();
+            const { error } = await db.from('vehicle_maintenance').update(maintenanceData).eq('id', maintenanceId);
+            if(error) { hideLoading(); showToast('แก้ไขข้อมูลไม่สำเร็จ', 'error'); console.error(error); return; }
+        } else {
+            const { data, error } = await db.from('vehicle_maintenance').insert(maintenanceData).select('id').single();
+            if(error) { hideLoading(); showToast('บันทึกข้อมูลไม่สำเร็จ', 'error'); console.error(error); return; }
+            recordId = data.id;
+        }
+
+        // Handle image deletion
+        if (maintenanceImagesToDelete.length > 0) {
+            const imageIdsToDelete = maintenanceImagesToDelete.map(img => img.id);
+            const imagePathsToDelete = maintenanceImagesToDelete.map(img => { const urlParts = img.image_url.split('/'); return urlParts.slice(urlParts.indexOf(MAINTENANCE_IMAGE_BUCKET) + 1).join('/'); });
+            await db.from('maintenance_images').delete().in('id', imageIdsToDelete);
+            await db.storage.from(MAINTENANCE_IMAGE_BUCKET).remove(imagePathsToDelete);
+        }
+
+        // Handle image uploads
+        if (selectedMaintenanceImageFiles.length > 0) {
+            const resizePromises = selectedMaintenanceImageFiles.map(file => resizeImage(file));
+            const resizedFiles = await Promise.all(resizePromises);
+            const uploadPromises = resizedFiles.map(file => { const filePath = `${recordId}/${Date.now()}_${file.name.split('.')[0]}.jpg`; return db.storage.from(MAINTENANCE_IMAGE_BUCKET).upload(filePath, file); });
+            const uploadResults = await Promise.all(uploadPromises);
+            const imageUrls = []; let uploadError = null;
+            for (const result of uploadResults) { 
+                if (result.error) { 
+                    console.error('Image upload error:', result.error); 
+                    uploadError = result.error; 
+                    break; 
+                } 
+                else { 
+                    const { data: { publicUrl } } = db.storage.from(MAINTENANCE_IMAGE_BUCKET).getPublicUrl(result.data.path); 
+                    imageUrls.push({ maintenance_id: recordId, image_url: publicUrl }); 
+                }
+            }
+            if (uploadError) {
+                let errorMessage = 'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ';
+                if (uploadError.message.includes('Bucket not found')) {
+                    errorMessage = 'อัปโหลดไม่สำเร็จ: ไม่พบ Storage Bucket "maintenance_images"';
+                    showToast(errorMessage, 'error', 8000);
+                    console.error('Hint: Please create a public Storage Bucket named "maintenance_images" in your Supabase project.');
+                } else {
+                    showToast(errorMessage, 'error');
+                }
+                hideLoading();
+                return; // Stop execution if upload fails
+            }
+            if (imageUrls.length > 0) { 
+                const { error: imageDbError } = await db.from('maintenance_images').insert(imageUrls); 
+                if (imageDbError) console.error('Error saving image URLs:', imageDbError);
+            }
+        }
+        
+        hideLoading();
+        showToast('บันทึกข้อมูลสำเร็จ', 'success');
+        closeMaintenanceModal();
+        showVehicleMaintenancePage(); // Refresh the list
+    };
+
+
+    // --- EVENT LISTENERS ---
+    const backToHome = () => {
+        if (customerSubscription) {
+            db.removeChannel(customerSubscription);
+            customerSubscription = null;
+            console.log('Unsubscribed from customer changes.');
+        }
+        currentSalesperson = null;
+        allCustomers = [];
+        salespersonInfo.innerHTML = '';
+        customerList.innerHTML = '';
+        resetFilters();
+        showPage('home', 'backward');
+    };
+
+    document.getElementById('back-to-home-btn').addEventListener('click', backToHome);
+    document.getElementById('back-to-home-from-profile-btn').addEventListener('click', backToHome);
+    document.getElementById('back-to-main-btn').addEventListener('click', () => showPage('main', 'backward'));
+    document.getElementById('back-to-main-from-sales-btn').addEventListener('click', () => showPage('main', 'backward'));
+    document.getElementById('back-to-main-from-stock-btn').addEventListener('click', () => showPage('main', 'backward'));
+    document.getElementById('back-to-profile-btn').addEventListener('click', () => showPage('salespersonProfile', 'backward'));
+
+
+    navButtons.forEach(btn => {
+        btn.addEventListener('click', () => showMainView(btn.dataset.view));
+    });
+
+    document.getElementById('go-to-sale-btn').addEventListener('click', showSalesPage);
+    document.getElementById('edit-customer-btn').addEventListener('click', () => openCustomerModal(currentCustomer));
+    confirmSaleBtn.addEventListener('click', handleSaleSubmit);
+    searchInput.addEventListener('input', updateCustomerListView);
+    villageFilter.addEventListener('change', updateCustomerListView);
+    subDistrictFilter.addEventListener('change', updateCustomerListView);
+    document.getElementById('add-customer-btn').addEventListener('click', () => openCustomerModal());
+    document.getElementById('cancel-customer-btn').addEventListener('click', closeCustomerModal);
+    customerForm.addEventListener('submit', handleCustomerFormSubmit);
+    document.getElementById('open-map-btn').addEventListener('click', openMapModal);
+    document.getElementById('cancel-map-btn').addEventListener('click', closeMapModal);
+    document.getElementById('confirm-map-btn').addEventListener('click', confirmMapSelection);
+    parseCoordsBtn.addEventListener('click', handleParseCoords);
+    customerImagesInput.addEventListener('change', (event) => {
+        const newFiles = event.target.files; if (!newFiles) return;
+        Array.from(newFiles).forEach(file => { if (file.type.startsWith('image/')) { selectedImageFiles.push(file); } });
+        renderImagePreviews(); event.target.value = '';
+    });
+    stockForm.addEventListener('submit', handleStockFormSubmit);
+    document.getElementById('cancel-stock-btn').addEventListener('click', closeStockModal);
+    saveStockBtn.addEventListener('click', handleSaveStockChanges);
+    sortDateBtn.addEventListener('click', () => {
+        currentSort.ascending = !currentSort.ascending;
+        sortDateBtn.innerHTML = currentSort.ascending ? `<i class="fas fa-sort-amount-down"></i>` : `<i class="fas fa-sort-amount-up"></i>`;
+        currentSort.type = 'date';
+        document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+        sortDateBtn.classList.add('active');
+        applySort();
+    });
+    sortDistBtn.addEventListener('click', () => {
+        currentSort.type = 'distance';
+        document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+        sortDistBtn.classList.add('active');
+        getCurrentLocationForSort();
+    });
+    viewRangeBtn.addEventListener('click', renderCustomDateRangeSummary);
+    document.getElementById('close-image-modal').addEventListener('click', closeImageModal);
+    imageModal.addEventListener('click', (e) => { if (e.target === imageModal) { closeImageModal(); } });
+    getCurrentLocationBtn.addEventListener('click', getCurrentLocationForModal);
+
+    // Maintenance Listeners
+    document.getElementById('add-maintenance-btn').addEventListener('click', () => openMaintenanceModal());
+    document.getElementById('cancel-maintenance-btn').addEventListener('click', closeMaintenanceModal);
+    maintenanceForm.addEventListener('submit', handleMaintenanceFormSubmit);
+    maintenanceImagesInput.addEventListener('change', (event) => {
+        const newFiles = event.target.files; if (!newFiles) return;
+        Array.from(newFiles).forEach(file => { if (file.type.startsWith('image/')) { selectedMaintenanceImageFiles.push(file); } });
+        
+        maintenanceImagePreviewContainer.innerHTML = '';
+        selectedMaintenanceImageFiles.forEach((file, index) => {
+            const previewWrapper = document.createElement('div'); previewWrapper.className = 'relative';
+            const img = document.createElement('img'); img.className = 'w-full h-24 object-cover rounded-md shadow-sm';
+            const reader = new FileReader(); reader.onload = (e) => { img.src = e.target.result; }; reader.readAsDataURL(file);
+            const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.className = 'absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs';
+            removeBtn.innerHTML = '×'; 
+            removeBtn.onclick = () => { selectedMaintenanceImageFiles.splice(index, 1); removeBtn.parentElement.remove(); };
+            previewWrapper.appendChild(img); previewWrapper.appendChild(removeBtn); maintenanceImagePreviewContainer.appendChild(previewWrapper);
+        });
+        event.target.value = '';
+    });
+
+
+    // Theme Toggle Listener
+    themeToggleBtn.addEventListener('click', toggleTheme);
+
+    // PWA Install Listeners
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBanner.classList.add('show');
+        installAppBtn.classList.remove('hidden');
+    });
+
+    dismissInstallBtn.addEventListener('click', () => {
+        installBanner.classList.remove('show');
+    });
+
+    installBtn.addEventListener('click', (e) => {
+        installBanner.classList.remove('show');
+        if (!deferredPrompt) { return; }
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+                showToast('ติดตั้งแอปสำเร็จ!', 'success');
+            } else {
+                showToast('ยกเลิกการติดตั้ง', 'info');
+            }
+            deferredPrompt = null;
+        });
+    });
+
+    installAppBtn.addEventListener('click', (e) => {
+        if(deferredPrompt) {
+            installBtn.click();
+        }
+    });
+
+    // --- START THE APP ---
+    initializeApp();
+});
+</script>
+</body>
+</html>
